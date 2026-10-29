@@ -58,6 +58,7 @@ e-mail, recuperação de senha e revogação de conta pela interface são evolu�
 | `POST /api/projects` | Engenheiro |
 | `GET /api/projects/:id` | Engenheiro ou cliente titular |
 | `PATCH /api/projects/:id` | Engenheiro; formulário completo |
+| `PATCH /api/projects/:id/client` | Engenheiro; vínculo explícito (`client_id` ou `null`), preservando os demais campos |
 | `POST /api/projects/:id/stages` | Engenheiro |
 | `PATCH, DELETE /api/projects/:id/stages/:recordId` | Engenheiro |
 | `POST /api/projects/:id/{materials,expenses,workers}` | Engenheiro |
@@ -70,6 +71,28 @@ e-mail, recuperação de senha e revogação de conta pela interface são evolu�
 POST/PATCH requerem JSON; mutações exigem `Origin` igual a `APP_ORIGIN`. PATCH dos
 cadastros recebe os campos completos, não um documento JSON Patch. Exclusão de
 etapa mantém os anexos e remove o vínculo, com registro da exclusão na auditoria.
+
+O endpoint de vínculo exige a propriedade `client_id`; um campo omitido não remove
+o acesso por acidente. A conta precisa ser de cliente ativo. Nome/e-mail do titular
+são expostos somente ao engenheiro. A troca de vínculo aplica-se imediatamente em
+todos os acessos seguintes, inclusive nos downloads de arquivos já publicados.
+
+O cadastro de cliente dentro da obra usa primeiro `POST /api/clients`, depois o
+salvamento da obra ou do vínculo. São duas operações: se a segunda falhar, a conta
+criada permanece disponível para seleção e nova tentativa, sem recriá-la. Cancelar
+o formulário após esse erro não apaga a conta criada.
+
+## Apresentação arquitetônica
+
+`public/visuals.js` contém ícones vetoriais e geometria HTML para ilustrações CSS 3D.
+Cada volume tem quatro fachadas e uma cobertura. Os controles alternam oito vistas;
+não há carregamento de modelo real, BIM, WebGL ou arquivos externos. As ilustrações
+são identificadas na interface como ilustrativas e não usam medidas da obra.
+
+A camada visual não determina o progresso da obra. Animações/transições são
+desativadas com `prefers-reduced-motion`. Ilustrações decorativas ficam fora da
+árvore de acessibilidade; controles possuem rótulos e suporte de teclado. As abas
+suportam setas, Home e End. Na versão móvel, as abas rolam horizontalmente.
 
 ## Arquivos e segurança operacional
 

@@ -54,6 +54,26 @@ test('fluxo de gestão de obras e autorização de ponta a ponta', async t => {
       assert.equal((await request(`/projects/${projectId}`,{cookie:outsider})).status,404);
       assert.equal((await request(`/projects/${otherProjectId}`,{cookie:client})).status,404);
     });
+    await t.test('vínculo dedicado preserva dados da obra e informa cliente ao engenheiro', async () => {
+      const linked = await request(`/projects/${otherProjectId}/client`, { method:'PATCH', cookie:engineer, data:{client_id:clientId, name:'Não deve alterar', budget:99} });
+      assert.equal(linked.status,200);
+      assert.equal(linked.data.client_name,'Cliente A');
+      assert.equal(linked.data.client_email,'a@example.com');
+      assert.equal(linked.data.name,'Interna');
+      assert.equal(linked.data.budget_cents,0);
+      assert.equal((await request(`/projects/${otherProjectId}`,{cookie:client})).status,200);
+      assert.equal((await request(`/projects/${otherProjectId}`,{cookie:client})).data.project.client_email,undefined);
+      assert.equal((await request(`/projects/${otherProjectId}/client`,{method:'PATCH',cookie:engineer,data:{client_id:null}})).status,200);
+      assert.equal((await request(`/projects/${otherProjectId}`,{cookie:client})).status,404);
+    });
+    await t.test('cliente não pode modificar vínculos e escolha omitida não remove acesso', async () => {
+      assert.equal((await request(`/projects/${projectId}/client`,{method:'PATCH',cookie:client,data:{client_id:null}})).status,403);
+      assert.equal((await request(`/projects/${projectId}/client`,{method:'PATCH',cookie:engineer,data:{}})).status,400);
+      for (const client_id of ['engineer','inexistente',{},[]]) {
+        assert.equal((await request(`/projects/${projectId}/client`,{method:'PATCH',cookie:engineer,data:{client_id}})).status,400);
+      }
+      assert.equal((await request(`/projects/${projectId}`,{cookie:client})).status,200);
+    });
     await t.test('datas, valores e clientes inválidos são rejeitados', async () => {
       for (const fields of [{start_date:'2026-02-30'},{start_date:'2027-01-01',end_date:'2026-01-01'},{budget:-1},{budget:0.001},{client_id:'inexistente'}]) {
         assert.equal((await request('/projects',{method:'POST',cookie:engineer,data:{name:'Inválida',...fields}})).status,400);

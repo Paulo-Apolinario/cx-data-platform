@@ -64,7 +64,8 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
       progress: counts.total ? Math.round(counts.completed / counts.total * 100) : 0
     };
     if (user.role === 'ENGINEER') {
-      Object.assign(result, { client_id: project.client_id, client_name: get('SELECT name FROM users WHERE id = ?', project.client_id)?.name || null,
+      const client = get('SELECT name,email FROM users WHERE id = ?', project.client_id);
+      Object.assign(result, { client_id: project.client_id, client_name: client?.name || null, client_email: client?.email || null,
         budget_cents: project.budget_cents,
         ...get(`SELECT COALESCE(SUM(amount_cents),0) expense_cents, COALESCE(SUM(CASE WHEN status='PAID' THEN amount_cents ELSE 0 END),0) paid_cents FROM expenses WHERE project_id = ?`, project.id) });
     }
@@ -181,6 +182,17 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
             return send(200, projectView(projectFor(user, project.id), user));
           }
         }
+        match = path.match(/^\/api\/projects\/([^/]+)\/client$/);
+        if (match && req.method === 'PATCH') {
+          engineer(user);
+          const project = projectFor(user, match[1]), input = await body(req);
+          // Require an explicit choice: an omitted property must not revoke client access.
+          if (!Object.hasOwn(input, 'client_id')) throw new v.HttpError(400, 'Selecione o cliente da obra.');
+          const clientId = input.client_id === '' ? null : input.client_id;
+          if (clientId !== null && (typeof clientId !== 'string' || !get("SELECT id FROM users WHERE id=? AND role='CLIENT' AND active=1", clientId))) throw new v.HttpError(400, 'Cliente inválido.');
+          transaction(() => { run('UPDATE projects SET client_id=? WHERE id=?', clientId, project.id); audit(user, 'project.client.updated', project.id); });
+          return send(200, projectView(projectFor(user, project.id), user));
+        }
         match = path.match(/^\/api\/projects\/([^/]+)\/(stages|materials|expenses|workers)(?:\/([^/]+))?$/);
         if (match) {
           engineer(user); const [, projectId, resource, id] = match;
@@ -249,7 +261,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
         }
         throw new v.HttpError(404, 'Recurso não encontrado.');
       }
-      const staticFiles = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
+      const staticFiles = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
       if (req.method !== 'GET' || !staticFiles[path]) throw new v.HttpError(404, 'Página não encontrada.');
       const [file, type] = staticFiles[path];
       res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` }); res.end(readFileSync(resolve(PUBLIC, file)));

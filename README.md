@@ -8,6 +8,9 @@ de CX está arquivada em `legacy/cx-events/` e não faz parte do sistema atual.
 
 - Login do engenheiro e de clientes, com sessões e troca de senha.
 - Cadastro/edição de obras, endereço, datas, orçamento e cliente titular.
+- Vínculo do cliente em destaque na obra, com nome/e-mail e ação de vincular ou trocar.
+- Cadastro do cliente dentro do formulário da obra ou da alteração de vínculo.
+- Visual arquitetônico com volumes 3D ilustrativos e controles de rotação.
 - Quadro de etapas: planejada, em execução e concluída.
 - Mapa fotográfico com data, ambiente, descrição e vínculo a uma etapa.
 - Documentos e notas em PDF/imagem; download protegido por autorização.
@@ -44,6 +47,18 @@ reinicia o servidor ao editar código. O repositório não exige `npm install`.
 4. Abra a obra e adicione etapas, materiais, despesas e equipe.
 5. Anexe fotos/documentos e escolha quais publicar.
 6. Saia e entre como cliente para conferir a experiência. Ele pode alterar sua senha.
+
+Também é possível criar o cliente diretamente em **Nova obra → Cliente da obra →
+Cadastrar cliente aqui**. Para uma obra já criada, abra-a e clique em **Vincular
+cliente** (ou **Alterar cliente**). Selecione nome/e-mail ou cadastre a nova conta
+ali mesmo e clique em **Salvar vínculo**. A troca preserva os dados da obra e muda
+qual cliente pode acessá-la. Selecionar **Sem cliente vinculado** retira o acesso.
+
+As ilustrações 3D aparecem na visão geral, nos cartões e no cabeçalho da obra.
+Os botões de giro exploram oito ângulos. São volumes conceituais de apresentação,
+**não representam a planta ou o modelo BIM real da obra**. Não exigem arquivos de
+modelo, GPU dedicada, WebGL, CDN ou dependências adicionais. A preferência do
+dispositivo por movimento reduzido é respeitada.
 
 Cada cliente pode acompanhar várias obras. A instalação admite uma conta de
 engenheiro. A aplicação web se adapta ao celular; não há aplicativo nativo/offline.
