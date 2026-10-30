@@ -11,6 +11,9 @@ de CX está arquivada em `legacy/cx-events/` e não faz parte do sistema atual.
 - Vínculo do cliente em destaque na obra, com nome/e-mail e ação de vincular ou trocar.
 - Cadastro do cliente dentro do formulário da obra ou da alteração de vínculo.
 - Visual arquitetônico com volumes 3D ilustrativos e controles de rotação.
+- Cartão inteiro da obra clicável, com link acessível por teclado e endereço próprio.
+- Busca e filtros por etapa/visibilidade em fotos e documentos; ampliação de imagens.
+- Lista de documentos com formato, tamanho, data, etapa e ações, adaptada ao celular.
 - Quadro de etapas: planejada, em execução e concluída.
 - Mapa fotográfico com data, ambiente, descrição e vínculo a uma etapa.
 - Documentos e notas em PDF/imagem; download protegido por autorização.
@@ -47,6 +50,17 @@ reinicia o servidor ao editar código. O repositório não exige `npm install`.
 4. Abra a obra e adicione etapas, materiais, despesas e equipe.
 5. Anexe fotos/documentos e escolha quais publicar.
 6. Saia e entre como cliente para conferir a experiência. Ele pode alterar sua senha.
+
+Clique em qualquer área do cartão da obra para abri-la. O controle de vínculo de
+cliente continua independente. O endereço com `#obra=...` pode ser copiado ou
+aberto em outra aba; recarregar a página mantém a obra aberta. A autorização segue
+obrigatória, e os botões voltar/avançar do navegador acompanham a navegação.
+
+Em **Documentos** e **Mapa fotográfico**, busque por título, descrição, nome do
+arquivo ou ambiente e filtre por etapa. O engenheiro também pode filtrar por
+publicação. Imagens podem ser ampliadas no sistema; PDFs são baixados. A busca
+ocorre nos metadados e não no conteúdo interno dos PDFs. Os resumos representam
+os arquivos autorizados carregados, e o contador indica quantos passaram no filtro.
 
 Também é possível criar o cliente diretamente em **Nova obra → Cliente da obra →
 Cadastrar cliente aqui**. Para uma obra já criada, abra-a e clique em **Vincular

@@ -1,7 +1,7 @@
 import { icon, buildingScene } from './visuals.js';
 
 const $ = selector => document.querySelector(selector);
-const state = { user: null, projects: [], clients: [], page: 'overview', projectId: null, detail: null, tab: 'stages', search: '' };
+const state = { user: null, projects: [], clients: [], page: 'overview', projectId: null, detail: null, tab: 'stages', search: '', attachmentSearch: '', attachmentStage: '', attachmentVisibility: 'all' };
 const labels = { ACTIVE: 'Em andamento', PAUSED: 'Pausada', COMPLETED: 'Concluída', PLANNED: 'Planejada', IN_PROGRESS: 'Em execução', PAID: 'Pago', PENDING: 'Pendente' };
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = cents => ((cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -31,6 +31,7 @@ async function refresh() {
   const [projects, clients] = await Promise.all([api('/projects'), isEngineer() ? api('/clients') : Promise.resolve([])]);
   let detail = null;
   if (state.projectId) detail = await api(`/projects/${state.projectId}`);
+  if (detail && state.attachmentStage && !detail.stages.some(s => s.id === state.attachmentStage)) state.attachmentStage = '';
   Object.assign(state, { projects, clients, detail }); render();
 }
 function render() {
@@ -83,7 +84,7 @@ function projectCards() {
         <div class="progress-caption"><span>Etapas concluídas</span><strong>${p.progress}%</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
         ${isEngineer() ? `<div class="card-client ${p.client_id ? '' : 'unassigned'}"><span class="client-avatar">${icon('users')}</span><div><small>CLIENTE DA OBRA</small><strong>${esc(p.client_name || 'Vincule o cliente desta obra')}</strong></div><button class="icon-button" data-action="assign-client" data-id="${p.id}" aria-label="${esc(p.client_id ? `Alterar cliente de ${p.name}` : `Vincular cliente a ${p.name}`)}">${icon(p.client_id ? 'link' : 'plus')}</button></div>` : ''}
         <div class="card-facts"><div><small>PREVISÃO DE ENTREGA</small><span>${day(p.end_date)}</span></div><div><small>ETAPAS</small><span>${p.completed_stages} de ${p.stage_count}</span></div></div>
-        <button class="card-open" data-action="open-project" data-id="${p.id}">Acompanhar obra ${icon('arrow')}</button>
+        <a class="card-open" href="#obra=${p.id}" data-action="open-project" data-id="${p.id}" aria-label="Acompanhar obra: ${esc(p.name)}">Acompanhar obra ${icon('arrow')}</a>
       </div>
     </article>`).join('');
 }
@@ -96,7 +97,7 @@ function projectDetail() {
   const tabs = [['stages','Quadro de obra'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['expenses','Despesas'],['workers','Equipe']] : [])];
   return `
     <button class="back text-button" data-action="back">← Todas as obras</button>
-    <section class="project-heading-panel"><div class="project-heading-copy"><span class="eyebrow">ACOMPANHAMENTO DA OBRA</span><h1>${esc(p.name)}</h1><p class="detail-address">${icon('pin')}${esc(p.address || 'Endereço não informado')}</p><div class="heading-actions">${badge(p.status)}${isEngineer() ? button('edit-project','Editar obra','','secondary') : ''}</div>${p.description ? `<p class="project-description">${esc(p.description)}</p>` : ''}</div>${buildingScene({ controls: true })}</section>
+    <section class="project-heading-panel"><div class="project-heading-copy"><span class="eyebrow">ACOMPANHAMENTO DA OBRA</span><h1 data-project-heading tabindex="-1">${esc(p.name)}</h1><p class="detail-address">${icon('pin')}${esc(p.address || 'Endereço não informado')}</p><div class="heading-actions">${badge(p.status)}${isEngineer() ? button('edit-project','Editar obra','','secondary') : ''}</div>${p.description ? `<p class="project-description">${esc(p.description)}</p>` : ''}</div>${buildingScene({ controls: true })}</section>
     ${isEngineer() ? `<section class="client-association ${p.client_id ? '' : 'unassigned'}" aria-labelledby="client-association-title"><span class="client-avatar">${icon('users')}</span><div class="client-association-copy"><span class="eyebrow" id="client-association-title">CLIENTE DA OBRA</span><h2>${esc(p.client_name || 'Esta obra ainda não tem cliente vinculado')}</h2><p>${p.client_id ? esc(p.client_email) : 'Vincule um cadastro existente ou crie o cliente aqui mesmo.'}</p><small>${p.client_id ? 'Acesso às etapas e aos arquivos publicados desta obra.' : 'O vínculo libera o acompanhamento no portal do cliente.'}</small></div>${button('assign-client', `${icon('link')} ${p.client_id ? 'Alterar cliente' : 'Vincular cliente'}`, `data-id="${p.id}"`, p.client_id ? 'secondary' : 'primary')}</section>` : ''}
     <div class="project-summary"><div><small>INÍCIO</small><strong>${day(p.start_date)}</strong></div><div><small>PREVISÃO DE ENTREGA</small><strong>${day(p.end_date)}</strong></div><div><small>ETAPAS CONCLUÍDAS</small><strong>${p.completed_stages} de ${p.stage_count} <span class="accent">${p.progress}%</span></strong></div>${isEngineer() ? `<div><small>ORÇAMENTO PREVISTO</small><strong>${money(p.budget_cents)}</strong></div>` : ''}</div>
     <p class="progress-note">O percentual considera a quantidade de etapas concluídas, com o mesmo peso para cada etapa.</p>
@@ -111,15 +112,67 @@ function tabContent() {
       return `<div class="board-column"><h3><span class="status-dot ${status.toLowerCase()}"></span>${labels[status]} <small>${stages.length}</small></h3>${stages.length ? stages.map(s => `<article class="stage-card"><h4>${esc(s.title)}</h4><p>${day(s.start_date)} → ${day(s.end_date)}</p><small>${state.detail.attachments.filter(a => a.stage_id === s.id).length} anexo(s)</small>${isEngineer() ? `<div class="row-actions">${button('edit-stage','Editar',`data-id="${s.id}"`,'text-button')}${button('delete-resource','Excluir',`data-resource="stages" data-id="${s.id}"`,'text-button danger')}</div>` : ''}</article>`).join('') : '<p class="column-empty">Nenhuma etapa nesta situação.</p>'}</div>`;
     }).join('')}</div>`;
   }
-  if (['photos','documents'].includes(state.tab)) {
-    const photo = state.tab === 'photos', kind = photo ? 'PHOTO' : 'DOCUMENT';
-    const items = state.detail.attachments.filter(a => a.kind === kind);
-    return `<div class="section-heading"><div><h2>${photo ? 'Mapa fotográfico' : 'Documentos da obra'}</h2><p>${photo ? 'Registros organizados por data, ambiente e etapa.' : 'Projetos, notas e comprovantes em um só lugar.'}</p></div>${isEngineer() ? button('new-attachment', photo ? '＋ Adicionar fotos' : '＋ Adicionar documento', `data-kind="${kind}"`) : ''}</div>${items.length ? `<div class="attachment-grid ${photo ? '' : 'documents'}">${items.map(a => `<article class="attachment-card">${photo ? `<a href="/api/attachments/${a.id}/file" target="_blank" rel="noopener"><img src="/api/attachments/${a.id}/file" alt="${esc(a.title)}" loading="lazy"></a>` : '<div class="document-icon">▤</div>'}<div class="attachment-info"><div class="attachment-meta"><span>${day(a.record_date)}</span>${isEngineer() ? `<span class="visibility ${a.visible_to_client ? 'published' : ''}">${a.visible_to_client ? 'Publicado' : 'Interno'}</span>` : ''}</div><h3>${esc(a.title)}</h3><p>${esc(a.description)}</p><small>${esc([a.location, state.detail.stages.find(s => s.id === a.stage_id)?.title].filter(Boolean).join(' · ') || a.file_name)}</small><div class="row-actions"><a class="text-button" href="/api/attachments/${a.id}/file?download=1">Baixar</a>${isEngineer() ? `${button('visibility',a.visible_to_client ? 'Tornar interno' : 'Publicar',`data-id="${a.id}" data-visible="${!a.visible_to_client}"`,'text-button')}${button('delete-attachment','Excluir',`data-id="${a.id}"`,'text-button danger')}` : ''}</div></div></article>`).join('')}</div>` : empty(photo ? 'O progresso merece ser registrado' : 'Documentação organizada desde o início', isEngineer() ? 'Adicione um registro. Você escolhe quando compartilhar com o cliente.' : 'Os registros publicados pelo engenheiro aparecerão aqui.')}`;
-  }
+  if (['photos','documents'].includes(state.tab)) return attachmentsPanel();
   if (state.tab === 'materials') return resourceTable('materials','Materiais','Controle inicial das quantidades registradas na obra.','Novo material', ['Material','Quantidade','Unidade','Observações'], m => [esc(m.name), m.quantity.toLocaleString('pt-BR'), esc(m.unit), esc(m.notes)]);
   if (state.tab === 'workers') return resourceTable('workers','Equipe da obra','Profissionais vinculados a este empreendimento.','Novo profissional', ['Nome','Função','Telefone','Situação'], w => [esc(w.name), esc(w.job_title), esc(w.phone), w.active ? 'Ativo' : 'Inativo']);
   const p = state.detail.project;
   return `<div class="finance-summary"><span>Registrado <strong>${money(p.expense_cents)}</strong></span><span>Pago <strong>${money(p.paid_cents)}</strong></span><span>Pendente <strong>${money(p.expense_cents - p.paid_cents)}</strong></span><span>Saldo do orçamento <strong>${money(p.budget_cents - p.expense_cents)}</strong></span></div>${resourceTable('expenses','Despesas','Acompanhamento financeiro interno da obra.','Nova despesa',['Descrição','Categoria','Data','Valor','Situação'], e => [esc(e.description),esc(e.category),day(e.expense_date),money(e.amount_cents),badge(e.status)])}`;
+}
+function attachmentItems() {
+  const kind = state.tab === 'photos' ? 'PHOTO' : 'DOCUMENT';
+  return state.detail.attachments.filter(a => a.kind === kind);
+}
+function filteredAttachments() {
+  const search = state.attachmentSearch.toLocaleLowerCase('pt-BR');
+  return attachmentItems().filter(a => {
+    const stage = state.detail.stages.find(s => s.id === a.stage_id);
+    return `${a.title} ${a.description} ${a.location} ${a.file_name} ${stage?.title || ''}`.toLocaleLowerCase('pt-BR').includes(search)
+      && (!state.attachmentStage || a.stage_id === state.attachmentStage)
+      && (!isEngineer() || state.attachmentVisibility === 'all' || Boolean(a.visible_to_client) === (state.attachmentVisibility === 'published'));
+  });
+}
+const fileSize = bytes => bytes >= 1024*1024 ? `${(bytes/(1024*1024)).toLocaleString('pt-BR',{maximumFractionDigits:1})} MB` : `${Math.max(1,Math.round(bytes/1024))} KB`;
+const fileLabel = a => a.mime_type === 'application/pdf' ? 'PDF' : a.mime_type.split('/')[1].toUpperCase();
+function attachmentActions(a) {
+  return `<div class="row-actions attachment-actions">${a.mime_type.startsWith('image/') ? button('preview-attachment','Visualizar',`data-id="${a.id}"`,'text-button') : ''}<a class="text-button" href="/api/attachments/${a.id}/file?download=1" aria-label="Baixar ${esc(a.title)}">Baixar</a>${isEngineer() ? `${button('visibility',a.visible_to_client ? 'Tornar interno' : 'Publicar',`data-id="${a.id}" data-visible="${!a.visible_to_client}"`,'text-button')}${button('delete-attachment','Excluir',`data-id="${a.id}"`,'text-button danger')}` : ''}</div>`;
+}
+function attachmentResults() {
+  const items = filteredAttachments(), photo = state.tab === 'photos';
+  if (!items.length) return empty(attachmentItems().length ? 'Nenhum registro encontrado' : photo ? 'Registre a evolução da obra' : 'Documentos organizados desde o início', attachmentItems().length ? 'Ajuste a busca ou os filtros para encontrar os registros.' : isEngineer() ? 'Adicione arquivos e escolha quais compartilhar com o cliente.' : 'Os arquivos publicados pelo engenheiro aparecerão aqui.');
+  if (!photo) return `<div class="panel document-list"><div class="table-wrap"><table><thead><tr><th>Documento</th><th>Registro / etapa</th><th>Arquivo</th>${isEngineer() ? '<th>Visibilidade</th>' : ''}<th>Ações</th></tr></thead><tbody>${items.map(a => `<tr><td><div class="document-title"><span class="file-emblem">${icon('projects')}<small>${fileLabel(a)}</small></span><div><strong>${esc(a.title)}</strong><span>${esc(a.description || a.file_name)}</span>${a.location ? `<small>${esc(a.location)}</small>` : ''}</div></div></td><td><span>${day(a.record_date)}</span><small class="cell-secondary">${esc(state.detail.stages.find(s => s.id === a.stage_id)?.title || 'Sem etapa vinculada')}</small></td><td><span>${fileLabel(a)}</span><small class="cell-secondary">${fileSize(a.size)}</small></td>${isEngineer() ? `<td><span class="visibility ${a.visible_to_client ? 'published' : ''}">${a.visible_to_client ? 'Publicado' : 'Interno'}</span></td>` : ''}<td>${attachmentActions(a)}</td></tr>`).join('')}</tbody></table></div></div>`;
+  return `<div class="attachment-grid">${items.map(a => `<article class="attachment-card"><button class="photo-open" data-action="preview-attachment" data-id="${a.id}" aria-label="Ampliar foto: ${esc(a.title)}"><img src="/api/attachments/${a.id}/file" alt="${esc(a.title)}" loading="lazy"><span>Ampliar registro ↗</span></button><div class="attachment-info"><div class="attachment-meta"><span>${day(a.record_date)}</span>${isEngineer() ? `<span class="visibility ${a.visible_to_client ? 'published' : ''}">${a.visible_to_client ? 'Publicado' : 'Interno'}</span>` : ''}</div><h3>${esc(a.title)}</h3><p>${esc(a.description)}</p><small>${esc([a.location,state.detail.stages.find(s => s.id === a.stage_id)?.title].filter(Boolean).join(' · ') || a.file_name)} · ${fileSize(a.size)}</small>${attachmentActions(a)}</div></article>`).join('')}</div>`;
+}
+function attachmentsPanel() {
+  const items = attachmentItems(), photo = state.tab === 'photos';
+  const totalSize = items.reduce((sum,a) => sum + a.size,0);
+  return `<div class="section-heading"><div><span class="eyebrow">${photo ? 'EVOLUÇÃO VISUAL' : 'ACERVO DA OBRA'}</span><h2>${photo ? 'Mapa fotográfico' : 'Documentos da obra'}</h2><p>${photo ? 'Inspecione registros por etapa, ambiente ou descrição.' : 'Projetos, notas e comprovantes com acesso organizado.'}</p></div>${isEngineer() ? button('new-attachment',photo ? '＋ Adicionar foto' : '＋ Adicionar documento',`data-kind="${photo ? 'PHOTO' : 'DOCUMENT'}"`) : ''}</div>
+  <div class="archive-summary"><span><strong>${items.length}</strong> ${photo ? 'foto(s)' : 'documento(s)'}</span>${isEngineer() ? `<span><strong>${items.filter(a=>a.visible_to_client).length}</strong> publicado(s)</span><span><strong>${items.filter(a=>!a.visible_to_client).length}</strong> interno(s)</span>` : ''}<span><strong>${items.length ? fileSize(totalSize) : '0 KB'}</strong> em arquivos</span></div>
+  <div class="archive-toolbar"><label class="search-label">${icon('search')}<span class="sr-only">Buscar registros</span><input id="attachment-search" type="search" placeholder="Buscar título, ambiente ou arquivo…" value="${esc(state.attachmentSearch)}"></label><label><span class="sr-only">Filtrar por etapa</span><select id="attachment-stage" aria-label="Filtrar por etapa"><option value="">Todas as etapas</option>${state.detail.stages.map(s=>`<option value="${s.id}" ${state.attachmentStage===s.id?'selected':''}>${esc(s.title)}</option>`).join('')}</select></label>${isEngineer() ? `<label><span class="sr-only">Filtrar por visibilidade</span><select id="attachment-visibility" aria-label="Filtrar por visibilidade">${[['all','Todas as visibilidades'],['published','Publicados'],['internal','Internos']].map(([id,label])=>`<option value="${id}" ${state.attachmentVisibility===id?'selected':''}>${label}</option>`).join('')}</select></label>` : ''}</div>
+  <p id="attachment-count" class="result-count" role="status">${filteredAttachments().length} de ${items.length} registro(s)</p><div id="attachment-results">${attachmentResults()}</div>`;
+}
+function updateAttachmentResults() {
+  $('#attachment-results').innerHTML = attachmentResults();
+  $('#attachment-count').textContent = `${filteredAttachments().length} de ${attachmentItems().length} registro(s)`;
+}
+function previewAttachment(id) {
+  const a = state.detail.attachments.find(a => a.id === id);
+  if (!a || !a.mime_type.startsWith('image/')) return;
+  const dialog = $('#modal');
+  dialog.innerHTML = `<div class="modal-heading"><h2 id="dialog-title">${esc(a.title)}</h2><button type="button" data-action="close-modal" class="icon-button" aria-label="Fechar">×</button></div><figure class="photo-preview"><img src="/api/attachments/${a.id}/file" alt="${esc(a.title)}"><figcaption>${day(a.record_date)}${a.location ? ` · ${esc(a.location)}` : ''}</figcaption></figure><p class="preview-description">${esc(a.description)}</p><div class="modal-footer"><a class="primary" href="/api/attachments/${a.id}/file?download=1">Baixar arquivo</a><button type="button" class="secondary" data-action="close-modal">Fechar</button></div>`;
+  dialog.showModal();
+}
+function routeProjectId() {
+  const id = new URLSearchParams(location.hash.slice(1)).get('obra');
+  return id && /^[a-f0-9-]{36}$/.test(id) ? id : null;
+}
+let projectRequest = 0;
+async function openProject(id, changeHistory = true) {
+  const request = ++projectRequest;
+  const detail = await api(`/projects/${id}`);
+  if (request !== projectRequest) return;
+  Object.assign(state,{projectId:id,detail,page:'projects',tab:'stages',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all'});
+  if (changeHistory) history.pushState(null,'',`#obra=${id}`);
+  render(); window.scrollTo(0,0); $('[data-project-heading]').focus({preventScroll:true});
 }
 function resourceTable(resource,title,description,add,headers,cells) {
   const items = state.detail[resource] || [];
@@ -249,10 +302,11 @@ document.addEventListener('click', async event => {
   const { action, id, resource } = target.dataset;
   try {
     if (action==='close-modal') return $('#modal').close();
-    if (action==='navigate' || action==='back') { state.page=target.dataset.page || 'projects'; state.projectId=null; state.detail=null; render(); return; }
-    if (action==='logout') { await api('/auth/logout',{method:'POST',body:{}}); state.user=null; state.projects=[]; state.detail=null; state.projectId=null; render(); return; }
-    if (action==='open-project') { const detail = await api(`/projects/${id}`); state.projectId=id; state.detail=detail; state.page='projects'; state.tab='stages'; render(); return; }
-    if (action==='tab') { state.tab=target.dataset.tab; render(); return; }
+    if (action==='navigate' || action==='back') { projectRequest++; state.page=target.dataset.page || 'projects'; state.projectId=null; state.detail=null; history.pushState(null,'',`#${state.page}`); render(); window.scrollTo(0,0); return; }
+    if (action==='logout') { await api('/auth/logout',{method:'POST',body:{}}); state.user=null; state.projects=[]; state.detail=null; state.projectId=null; history.replaceState(null,'','#overview'); render(); return; }
+    if (action==='open-project') { if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); await openProject(id); return; }
+    if (action==='preview-attachment') return previewAttachment(id);
+    if (action==='tab') { state.tab=target.dataset.tab;state.attachmentSearch='';state.attachmentStage='';state.attachmentVisibility='all'; render(); return; }
     if (action==='assign-client') return clientAssignmentForm(id);
     if (action==='inline-client') { const form = target.closest('form'); toggleInlineClient(form, form.querySelector('[data-inline-client]').hidden); return; }
     if (action==='rotate-model') {
@@ -274,15 +328,30 @@ document.addEventListener('click', async event => {
   } catch(error) { handleError(error); }
   finally { target.disabled=false; }
 });
-document.addEventListener('input', event=>{if(event.target.id==='project-search'){state.search=event.target.value;$('#project-grid').innerHTML=projectCards();}});
+document.addEventListener('input', event=>{
+  if(event.target.id==='project-search'){state.search=event.target.value;$('#project-grid').innerHTML=projectCards();}
+  if(event.target.id==='attachment-search'){state.attachmentSearch=event.target.value;updateAttachmentResults();}
+});
+document.addEventListener('change', event=>{
+  if(event.target.id==='attachment-stage'){state.attachmentStage=event.target.value;updateAttachmentResults();}
+  if(event.target.id==='attachment-visibility'){state.attachmentVisibility=event.target.value;updateAttachmentResults();}
+});
+window.addEventListener('popstate',async()=>{
+  if(!state.user)return;
+  try {
+    const id=routeProjectId();
+    if(id)await openProject(id,false);
+    else{projectRequest++;state.projectId=null;state.detail=null;state.page=location.hash==='#clients'&&isEngineer()?'clients':location.hash==='#overview'?'overview':'projects';render();}
+  }catch(error){handleError(error);}
+});
 document.addEventListener('submit', async event=>{
   if(event.target.id!=='login-form') return;
   event.preventDefault();const form=event.target, submit=form.querySelector('[type=submit]');submit.disabled=true;
-  try { state.user=await api('/auth/login',{method:'POST',body:Object.fromEntries(new FormData(form))}); state.projectId=null;state.detail=null;state.page='overview';state.search='';await refresh(); }
+  try { state.user=await api('/auth/login',{method:'POST',body:Object.fromEntries(new FormData(form))}); state.projectId=null;state.detail=null;state.page='overview';state.search='';await refresh();const id=routeProjectId();if(id){try{await openProject(id,false);}catch(error){handleError(error);}} }
   catch(error){form.querySelector('.form-error').textContent=error.message;}
   finally{submit.disabled=false;}
 });
-try { state.user=await api('/auth/me');await refresh(); }
+try { state.user=await api('/auth/me');await refresh(); const id=routeProjectId();if(id){try{await openProject(id,false);}catch(error){handleError(error);}} }
 catch(error){if(error.status!==401)notice(error.message,true);state.user=null;render();}
 
 // Keyboard navigation follows the tab pattern without requiring pointer input.
