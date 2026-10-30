@@ -24,7 +24,7 @@ de CX está arquivada em `legacy/cx-events/` e não faz parte do sistema atual.
 - Financeiro com fornecedor, vencimento, pagamentos parciais, comprovantes e estornos.
 - Cronograma com percentual concluído, responsáveis, datas previstas/reais e participação avançada opcional.
 - Unidades de material por lista, prévia de saldo, estorno de movimentos, mínimo e reservas.
-- Compras/cotações com comparação de totais e recebimento integrado ao estoque e financeiro.
+- Compras efetuadas com cadastro de material na própria compra, entrada automática, despesa/pagamento e saldo do orçamento atualizados juntos.
 - Acabamentos com opções, fotos, adicionais e decisão do cliente.
 - Vistoria/pós-obra com fotos enviadas pelo cliente, atendimento, conferência e reabertura.
 - Solicitações de alteração e custos adicionais, com aprovação ou recusa pelo cliente.
@@ -197,14 +197,17 @@ A migração 3 cria as tabelas de conversas automaticamente no próximo início.
   serviços; Livre para usar = Na obra − Reservado. Registrar uso dá baixa uma vez.
   Liberar reserva apenas devolve a quantidade ao saldo livre. Estoque mínimo gera
   alerta quando o saldo livre fica abaixo do mínimo configurado.
-- **Compras:** solicite um material, adicione cotações com preço por unidade,
-  frete e data de entrega, compare os totais e escolha um fornecedor. As cotações
-  são cadastradas manualmente; o sistema não contata fornecedores. Ao receber o
-  pedido completo, a entrada e a despesa a pagar são criadas na mesma transação.
-  Não lance esses registros novamente nas outras abas. O recebimento não quita a
-  despesa; pagamentos continuam na aba Despesas. Compras finalizadas preservam
-  seus vínculos, valores e histórico. Recebimento parcial e devolução de compra
-  ainda não estão disponíveis; registre o recebimento somente quando tudo chegar.
+- **Compras:** use Registrar compra para o que já foi comprado e está entrando na
+  obra. Escolha um material existente ou cadastre o novo ali mesmo. Informe
+  quantidade, preço unitário, frete, fornecedor, data e número da nota (opcional).
+  A prévia mostra total, saldo do orçamento e entrada no estoque. Informe se já
+  foi paga (registra o pagamento) ou ficou a pagar (registra a despesa pendente).
+  A confirmação faz tudo em uma transação, sem repetir na aba Materiais/Despesas.
+  O saldo do orçamento é orçamento menos todas as despesas registradas; não é
+  um extrato bancário e diminui também para compras a prazo. A lista mostra o
+  estado atual do pagamento. Cotações e pedidos intermediários foram desativados.
+  Registros anteriores ainda pendentes ficam em área recolhida: podem ser
+  concluídos com os dados da compra efetiva ou cancelados, sem lançamento automático.
 - **Acabamentos:** crie um rascunho por ambiente, adicione opções e fotos de
   referência do mapa fotográfico, depois envie ao cliente. Fotos precisam estar
   publicadas. O cliente escolhe uma opção ou recusa as propostas. A decisão fica
@@ -217,3 +220,15 @@ A migração 3 cria as tabelas de conversas automaticamente no próximo início.
 
 A migração 4 adiciona essas estruturas automaticamente e preserva os dados
 anteriores. Faça backup de DATA_DIR com o servidor parado antes de atualizar.
+
+### Organização atual (migração 5)
+
+Perguntas, Acabamentos e Vistoria e pós-obra ficam no final das abas para os dois
+perfis. Materiais usa cartões por item, saldo disponível, alertas, busca e filtros.
+Registrar retirada dá baixa; Comprar mais abre a compra já com o material escolhido.
+Estoque inicial é para material que já existia, sem nova compra. Entrada sem compra
+(doação, devolução de uso ou ajuste justificado), reservas e edição ficam em Outras
+ações. Histórico e reservas são recolhidos por padrão e podem ser consultados.
+
+A migração 5 preserva compras e saldos anteriores, sem repetir despesas, pagamentos
+ou movimentos. Nenhum registro antigo pendente vira compra automaticamente.

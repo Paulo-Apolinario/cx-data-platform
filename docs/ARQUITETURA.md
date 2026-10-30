@@ -241,3 +241,29 @@ não podem ser excluídas. A apresentação do histórico segue a ordem de regis
 Limites: cotação manual, recebimento completo (sem parcial/devolução), sem contato
 externo automático, assinatura digital ou cobrança a partir de escolhas. Não há
 conversão de unidades nem ajuste automático de lançamentos antigos ambíguos.
+
+## Compras diretas e organização atual (migração 5)
+
+Esta seção substitui o fluxo de cotação/pedido/recebimento descrito na migração 4.
+POST `/api/projects/:project/purchases` registra a compra efetuada. Recebe
+`material_id` ou `new_material: {name,unit}`, quantity, unit_price, freight,
+purchase_date, supplier, invoice_number, payment_status (PAID/PENDING), method,
+due_date, notes e request_id. O servidor calcula o total em centavos, reutiliza
+material com mesmo nome/unidade ou cadastra o novo e, na mesma transação, cria:
+entrada de estoque, despesa, pagamento integral quando informado como pago e
+registro da compra. Saldo de orçamento continua derivado de orçamento − despesas;
+compras a prazo também comprometem esse saldo, enquanto pago/a pagar são separados.
+O cadastro novo não ignora material homônimo com unidade legada inválida: exige
+corrigir primeiro o cadastro existente para evitar duplicação ambígua.
+
+POST `/purchases/:id/complete` permite concluir registros anteriores pendentes,
+exigindo o mesmo material e os dados da compra real. POST `/cancel` preserva o
+cancelamento dos pendentes. Rotas de quotes/order/receive retornam conflito,
+orientando a usar Registrar compra. Reenvios idênticos continuam idempotentes.
+Dados de cotações antigas são preservados no banco; compras recebidas têm seus
+metadados preenchidos pela migração sem criar lançamentos adicionais. Rascunhos
+pendentes permanecem sem efeito no estoque ou financeiro até confirmação explícita.
+
+Perguntas/Acabamentos/Vistoria ficam nas últimas posições das abas. Materiais
+prioriza saldo livre por cartão e compra/retirada; reservas, entradas sem custo e
+histórico são acessíveis sob demanda. A retirada não oferece o tipo Entrada.

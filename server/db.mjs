@@ -203,5 +203,22 @@ export function openDatabase(dataDir) {
       INSERT INTO migrations(version) VALUES(4);
     COMMIT;`);
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version = 5').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      ALTER TABLE purchases ADD COLUMN purchase_date TEXT;
+      ALTER TABLE purchases ADD COLUMN supplier TEXT NOT NULL DEFAULT '';
+      ALTER TABLE purchases ADD COLUMN unit_price_cents INTEGER;
+      ALTER TABLE purchases ADD COLUMN freight_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE purchases ADD COLUMN total_cents INTEGER;
+      ALTER TABLE purchases ADD COLUMN invoice_number TEXT NOT NULL DEFAULT '';
+      UPDATE purchases SET purchase_date=(SELECT expense_date FROM expenses WHERE id=purchases.expense_id),
+        supplier=COALESCE((SELECT supplier FROM purchase_quotes WHERE id=purchases.selected_quote_id),''),
+        unit_price_cents=(SELECT unit_price_cents FROM purchase_quotes WHERE id=purchases.selected_quote_id),
+        freight_cents=COALESCE((SELECT freight_cents FROM purchase_quotes WHERE id=purchases.selected_quote_id),0),
+        total_cents=(SELECT amount_cents FROM expenses WHERE id=purchases.expense_id)
+        WHERE status='RECEIVED';
+      INSERT INTO migrations(version) VALUES(5);
+    COMMIT;`);
+  }
   return db;
 }

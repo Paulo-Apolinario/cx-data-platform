@@ -5,8 +5,8 @@
 | Módulo | Entrega |
 | --- | --- |
 | Diário de obra | Data, serviços, ocorrências, equipe presente por snapshot, fotos, notas internas, publicação, revisões, arquivamento e relatório para imprimir/salvar PDF. |
-| Materiais | Lista de unidades, prévia de saldo, entradas/retiradas, estornos, mínimo, reservas, uso e transferência atômica. |
-| Compras | Solicitação, comparação de cotações, pedido e recebimento integrado ao estoque e financeiro. |
+| Materiais | Cartões por material, busca/filtros, saldo livre em destaque, compra/retirada, catálogo de unidades, alertas, reservas e histórico recolhido. |
+| Compras | Compra efetuada em um registro: material novo/existente, quantidade, preço/frete, fornecedor/nota, estoque, despesa/pagamento e saldo do orçamento. |
 | Acabamentos | Opções com fotos e adicionais por ambiente, envio ao cliente e decisão imutável. |
 | Vistoria e pós-obra | Pendências, fotos enviadas pelo cliente, atendimento, responsável/prazo, conferência, reabertura e histórico. |
 | Financeiro | Fornecedor, vencimento, pagamento parcial, comprovante, estorno justificado, indicadores e orçamento versus realizado. |
@@ -18,7 +18,7 @@
 
 - Revisões e categorias de documentos, versão vigente e validade.
 - Dependências entre etapas, Gantt e comparativos de produtividade.
-- Catálogo compartilhado de materiais, recebimentos parciais e devoluções de compra.
+- Catálogo compartilhado de materiais, devoluções e eventual retomada de pedidos/cotações.
 - Convites e recuperação de conta, notificações e consulta da auditoria geral.
 - Backup automatizado, restauração validada e implantação com HTTPS na VPS.
 

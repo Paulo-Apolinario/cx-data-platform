@@ -85,39 +85,49 @@ test('estoque: retiradas subtraem, reservas protegem saldo e estornos são audit
  }finally{await f.close();}
 });
 
-test('compras: comparar total, pedir e receber integra estoque e financeiro atomicamente',async t=>{
- const f=await fixture(),{req,db,project:p,target:q}=f,base=`/projects/${p}`,date=workToday();
- let material,purchase,quote;
+test('compras diretas: registro único cria material, baixa orçamento e informa pagamento',async t=>{
+ const f=await fixture(),{req,db,project:p,target:q}=f,base=`/projects/${p}`,date=workToday();let material,purchase;
  try {
-  await t.test('pedido e propostas respeitam material/obra, cálculo e bloqueio após escolha',async()=>{
-   material=(await req(base+'/materials','POST',{name:'Cimento',unit:'saco',quantity:0})).data.id;
-   const input={material_id:material,quantity:10,request_id:randomUUID()};for(let i=0;i<2;i++)assert.equal((await req(base+'/purchases','POST',input)).status,201);purchase=input.request_id;
-   assert.equal((await req(`/projects/${q}/purchases`,'POST',{material_id:material,quantity:1})).status,404);
-   assert.equal((await req(`${base}/materials/${material}`,'DELETE')).status,409);
-   quote=(await req(`${base}/purchases/${purchase}/quotes`,'POST',{supplier:'Loja A',unit_price:30,freight:20,delivery_date:date})).data.id;
-   await req(`${base}/purchases/${purchase}/quotes`,'POST',{supplier:'Loja B',unit_price:31,freight:0});
-   const quotes=(await req(base)).data.purchases[0].quotes;assert.equal(quotes[0].total_cents,31000);assert.equal(quotes[1].total_cents,32000);
+  await t.test('compra paga cadastra material, estoque, despesa e pagamento atomicamente',async()=>{
+   const input={new_material:{name:'Tijolos',unit:'un'},quantity:1000,unit_price:.5,freight:20,supplier:'Depósito A',purchase_date:date,payment_status:'PAID',method:'PIX',invoice_number:'NF-12',request_id:randomUUID()};
+   for(let i=0;i<2;i++){const r=await req(base+'/purchases','POST',input);assert.equal(r.status,201);material=r.data.material_id;purchase=r.data.id;}
+   const d=(await req(base)).data;assert.equal(d.materials.length,1);assert.equal(d.materials[0].quantity,1000);assert.equal(d.movements.length,1);assert.equal(d.expenses.length,1);assert.equal(d.payments.length,1);
+   assert.equal(d.project.expense_cents,52000);assert.equal(d.project.paid_cents,52000);assert.equal(d.project.budget_cents-d.project.expense_cents,448000);assert.equal(d.purchases[0].invoice_number,'NF-12');
    assert.equal((await req(`${base}/purchases/${purchase}/receive`,'POST',{received_date:date})).status,409);
-   assert.equal((await req(`${base}/purchases/${purchase}/order`,'POST',{quote_id:quote})).status,201);
-   assert.equal((await req(`${base}/purchases/${purchase}/quotes`,'POST',{supplier:'Tardia',unit_price:1})).status,409);
+   assert.equal((await req(base+'/purchases','POST',{...input,quantity:999})).status,409);
+  });
+  await t.test('compra a prazo soma ao material existente sem duplicar e não registra pagamento',async()=>{
+   const r=await req(base+'/purchases','POST',{material_id:material,quantity:100,unit_price:.6,freight:0,supplier:'Loja B',purchase_date:date,payment_status:'PENDING',due_date:date});assert.equal(r.status,201);
+   const d=(await req(base)).data;assert.equal(d.materials.length,1);assert.equal(d.materials[0].quantity,1100);assert.equal(d.project.expense_cents,58000);assert.equal(d.project.paid_cents,52000);assert.equal(d.payments.length,1);
+   assert.equal((await req(`${base}/expenses/${r.data.expense_id}`,'DELETE')).status,409);
+   assert.equal((await req(`${base}/movements/${r.data.movement_id}/reverse`,'POST',{reason:'Compra vinculada'})).status,409);
+   assert.equal((await req(`${base}/expenses/${r.data.expense_id}`,'PATCH',{description:'Compra',category:'Materiais',amount:10,expense_date:date})).status,409);
+  });
+  await t.test('novo material com mesmo nome/unidade reutiliza cadastro e permite saldo negativo no orçamento real',async()=>{
+   const r=await req(base+'/purchases','POST',{new_material:{name:' tijolos ',unit:'un'},quantity:10,unit_price:1000,supplier:'Loja C',purchase_date:date});assert.equal(r.status,201);assert.equal(r.data.material_id,material);
+   const d=(await req(base)).data;assert.equal(d.materials.length,1);assert.equal(d.materials[0].quantity,1110);assert.ok(d.project.budget_cents-d.project.expense_cents<0);
+  });
+  await t.test('validação, isolamento e cotação desativada não deixam registros parciais',async()=>{
+   const input={new_material:{name:'Não criar',unit:'kg'},quantity:10,unit_price:10,supplier:'Loja',purchase_date:date,payment_status:'PENDING',due_date:'inválida'};
+   const before=(await req(base)).data;
+   assert.equal((await req(base+'/purchases','POST',input)).status,400);
+   assert.equal((await req(base+'/purchases','POST',{...input,due_date:date,new_material:{name:'Não criar',unit:'1000 un'}})).status,400);
+   assert.equal((await req(`/projects/${q}/purchases`,'POST',{material_id:material,quantity:10,unit_price:10,supplier:'Loja',purchase_date:date})).status,404);
+   assert.equal((await req(base+'/purchases','POST',{...input,due_date:date},'client')).status,403);
+   assert.equal((await req(`${base}/purchases/${purchase}/quotes`,'POST',{supplier:'Loja',unit_price:10})).status,409);
+   db.prepare('UPDATE materials SET unit=? WHERE id=?').run('1000 un',material);
+   assert.equal((await req(base+'/purchases','POST',{new_material:{name:'Tijolos',unit:'un'},quantity:1,unit_price:1,supplier:'Loja',purchase_date:date})).status,409);
+   db.prepare('UPDATE materials SET unit=? WHERE id=?').run('un',material);
+   const after=(await req(base)).data;assert.equal(after.materials.length,before.materials.length);assert.equal(after.expenses.length,before.expenses.length);assert.equal(after.movements.length,before.movements.length);
    assert.equal((await req(base,'GET',undefined,'client')).data.purchases,undefined);
   });
-  await t.test('recebimento repetido não duplica entrada ou despesa; cancelamento não desfaz entrega',async()=>{
-   const input={received_date:date,due_date:date,request_id:randomUUID()};for(let i=0;i<2;i++)assert.equal((await req(`${base}/purchases/${purchase}/receive`,'POST',input)).status,201);
-   assert.equal((await req(`${base}/purchases/${purchase}/receive`,'POST',{received_date:date})).status,409);
-   const d=(await req(base)).data;assert.equal(d.materials[0].quantity,10);assert.equal(d.expenses.length,1);assert.equal(d.expenses[0].amount_cents,32000);assert.equal(d.expenses[0].paid_cents,0);assert.equal(d.movements.length,1);
-   assert.equal((await req(`${base}/purchases/${purchase}/cancel`,'POST',{reason:'Já chegou'})).status,409);
-   assert.equal((await req(`${base}/expenses/${d.expenses[0].id}`,'DELETE')).status,409);
-   assert.equal((await req(`${base}/expenses/${d.expenses[0].id}`,'PATCH',{description:'Compra',category:'Materiais',amount:100,expense_date:date})).status,409);
-   assert.equal((await req(`${base}/movements/${d.movements[0].id}/reverse`,'POST',{reason:'Compra recebida'})).status,409);
-  });
-  await t.test('erro no recebimento reverte estoque e despesa na mesma transação',async()=>{
-   const id=(await req(base+'/purchases','POST',{material_id:material,quantity:5})).data.id;
-   const quote=(await req(`${base}/purchases/${id}/quotes`,'POST',{supplier:'Loja C',unit_price:10})).data.id;
-   await req(`${base}/purchases/${id}/order`,'POST',{quote_id:quote});
-   assert.equal((await req(`${base}/purchases/${id}/receive`,'POST',{received_date:date,due_date:'inválida'})).status,400);
-   const d=(await req(base)).data;assert.equal(d.materials[0].quantity,10);assert.equal(d.expenses.length,1);assert.equal(d.purchases.find(x=>x.id===id).status,'ORDERED');
-   assert.equal(db.prepare('SELECT COUNT(*) n FROM material_movements').get().n,1);
+  await t.test('registro antigo pendente só entra no estoque e orçamento quando confirmado',async()=>{
+   const old=randomUUID();db.prepare("INSERT INTO purchases(id,project_id,material_id,quantity) VALUES(?,?,?,500)").run(old,p,material);
+   const before=(await req(base)).data;
+   const input={material_id:material,quantity:500,unit_price:.5,supplier:'Compra anterior',purchase_date:date,payment_status:'PENDING',request_id:randomUUID()};
+   for(let i=0;i<2;i++)assert.equal((await req(`${base}/purchases/${old}/complete`,'POST',input)).status,201);
+   const after=(await req(base)).data;assert.equal(after.materials[0].quantity,before.materials[0].quantity+500);assert.equal(after.project.expense_cents,before.project.expense_cents+25000);assert.equal(after.purchases.find(p=>p.id===old).status,'RECEIVED');
+   assert.equal((await req(`${base}/purchases/${old}/complete`,'POST',{...input,request_id:randomUUID()})).status,409);
   });
  }finally{await f.close();}
 });
@@ -175,4 +185,25 @@ test('acabamentos e pós-obra: decisões, fotos e histórico isolados por titula
    assert.equal((await req(base)).data.inspections.length,1);
   });
  }finally{await f.close();}
+});
+
+test('migração 5 preserva compras antigas e não lança estoque ou despesa novamente',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'purchases-migration-'));let db=openDatabase(dir);
+ try {
+  db.prepare("INSERT INTO projects(id,name) VALUES('p','Obra anterior')").run();
+  db.prepare("INSERT INTO materials(id,project_id,name,unit,quantity) VALUES('m','p','Cimento','saco',10)").run();
+  db.prepare("INSERT INTO material_movements(id,material_id,type,quantity,delta,movement_date) VALUES('move','m','ENTRY',10,10,'2026-10-01')").run();
+  db.prepare("INSERT INTO expenses(id,project_id,description,category,amount_cents,expense_date,status) VALUES('e','p','Compra','Materiais',32000,'2026-10-01','PENDING')").run();
+  db.prepare("INSERT INTO purchases(id,project_id,material_id,quantity) VALUES('old','p','m',10)").run();
+  db.prepare("INSERT INTO purchase_quotes(id,purchase_id,supplier,unit_price_cents,freight_cents,total_cents) VALUES('quote','old','Fornecedor antigo',3000,2000,32000)").run();
+  db.prepare("UPDATE purchases SET status='RECEIVED',selected_quote_id='quote',expense_id='e',movement_id='move' WHERE id='old'").run();
+  db.prepare("INSERT INTO purchases(id,project_id,material_id,quantity) VALUES('pending','p','m',500)").run();
+  db.exec('DELETE FROM migrations WHERE version=5');
+  for(const column of ['purchase_date','supplier','unit_price_cents','freight_cents','total_cents','invoice_number'])db.exec(`ALTER TABLE purchases DROP COLUMN ${column}`);
+  db.close();db=openDatabase(dir);
+  const p=db.prepare("SELECT * FROM purchases WHERE id='old'").get();assert.equal(p.total_cents,32000);assert.equal(p.freight_cents,2000);assert.equal(p.supplier,'Fornecedor antigo');assert.equal(p.purchase_date,'2026-10-01');
+  assert.equal(db.prepare("SELECT total_cents FROM purchases WHERE id='pending'").get().total_cents,null);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM expenses').get().n,1);assert.equal(db.prepare('SELECT SUM(delta) n FROM material_movements').get().n,10);
+  db.close();db=openDatabase(dir);assert.equal(db.prepare('SELECT COUNT(*) n FROM expenses').get().n,1);assert.equal(db.prepare('SELECT COUNT(*) n FROM material_movements').get().n,1);
+ }finally{db.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -1595,3 +1595,51 @@ progress { height: 5px; margin-bottom: 19px; }
 .advanced-settings p { font-size:.88rem;line-height:1.5; }
 .inspection-history { margin:1rem 0; }
 @media(max-width:600px) { .workflow-card {padding:1rem;} .workflow-card > .section-heading {flex-direction:column;align-items:flex-start;} }
+
+.purchase-summary,.stock-overview { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.25rem 0; }
+.purchase-summary > div,.stock-overview > span { background:#fff;border:1px solid #d9e3de;border-radius:10px;padding:1.1rem; }
+.purchase-summary small,.stock-overview > span { color:#62766e;font-size:.8rem; }
+.purchase-summary strong,.stock-overview strong { display:block;color:#214e43;font-size:1.45rem;margin-top:.4rem; }
+.purchase-summary .over-budget strong { color:#ad4d35; }
+.purchase-table {min-width:680px;}
+.stock-guide { padding:1rem 1.2rem;line-height:1.8;background:#eaf1eb;border-radius:10px;margin:1.25rem 0; }
+.stock-filters {display:flex;gap:1rem;align-items:end;flex-wrap:wrap;margin:1.5rem 0;}
+.stock-filters label:first-child {flex:1;min-width:180px;}
+.stock-filters label {font-size:.82rem;display:grid;gap:.5rem;}
+.material-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:1.25rem; }
+.material-card { padding:1.4rem;background:#fff;border:1px solid #d9e3de;border-radius:12px;min-width:0;display:flex;flex-direction:column; }
+.material-card-heading { display:flex;justify-content:space-between;align-items:start;gap:1rem;margin-bottom:1.5rem; }
+.material-card-heading h3 { margin:0;overflow-wrap:anywhere; }
+.material-stock-label {font-size:.65rem;letter-spacing:.1em;color:#62766e;}
+.material-stock {margin:.5rem 0;}
+.material-stock .stock-quantity strong {font-size:2rem;line-height:1.2;}
+.stock-breakdown,.stock-minimum {font-size:.8rem;color:#62766e;line-height:1.7;}
+.stock-breakdown .stock-quantity strong,.stock-minimum .stock-quantity strong {font-size:.85rem;}
+.material-notes {font-size:.85rem;white-space:pre-wrap;overflow-wrap:anywhere;}
+.material-actions { display:flex;gap:.6rem;flex-wrap:wrap;margin-top:auto;padding-top:1rem; }
+.material-actions button {font-size:.8rem;}
+.material-bottom-actions {display:flex;justify-content:space-between;gap:1rem;border-top:1px solid #e4eae6;margin-top:1.25rem;padding-top:1rem;align-items:start;}
+.material-more summary {cursor:pointer;font-size:.8rem;font-weight:600;padding:.3rem;}
+.material-more > div {display:grid;gap:.5rem;padding-top:.8rem;}
+.stock-section {margin:1.5rem 0;padding:1.2rem;background:#fff;border:1px solid #d9e3de;border-radius:10px;min-width:0;}
+.stock-section > summary {font-weight:600;cursor:pointer;}
+.stock-section > p {font-size:.85rem;line-height:1.7;color:#62766e;}
+.stock-section .table-wrap {margin-top:1rem;}
+.stock-section > label {display:inline-grid;font-size:.8rem;gap:.4rem;margin:0 1rem 1rem 0;}
+.purchase-new[hidden],.purchase-existing[hidden],.purchase-due[hidden],.purchase-method[hidden] {display:none;}
+@media(max-width:600px) { .purchase-summary,.stock-overview {gap:.5rem;} .purchase-summary > div,.stock-overview > span {padding:.7rem;} .purchase-summary strong,.stock-overview strong {font-size:1.05rem;} .purchase-summary small {font-size:.6rem;} .stock-section {padding:1rem;} }
+@media(max-width:600px) {
+  .purchase-summary {grid-template-columns:1fr;}
+  .purchase-summary > div {display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem;min-width:0;}
+  .purchase-summary small {font-size:.68rem;max-width:45%;}
+  .purchase-summary strong {margin:0;white-space:nowrap;font-size:1.2rem;}
+}
+@media(max-width:600px) {
+  .purchase-table,.purchase-table tbody {display:block;min-width:0;width:100%;}
+  .purchase-table thead {display:none;}
+  .purchase-table tr {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:.7rem;border-bottom:1px solid #d9e3de;}
+  .purchase-table tr:last-child {border-bottom:0;}
+  .purchase-table td {display:block;padding:.6rem;border:0;overflow-wrap:anywhere;}
+  .purchase-table td:nth-child(1),.purchase-table td:nth-child(2),.purchase-table td:nth-child(5),.purchase-table td[colspan] {grid-column:1/-1;}
+  .purchase-table td::before {content:attr(data-label);display:block;color:#62766e;font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;}
+}

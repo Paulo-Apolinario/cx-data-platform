@@ -102,7 +102,7 @@ function clientsPage() {
 }
 function projectDetail() {
   const { project: p } = state.detail;
-  const tabs = [['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['questions','Perguntas'],['selections','Acabamentos'],['inspections','Vistoria e pós-obra'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['purchases','Compras'],['expenses','Despesas'],['workers','Equipe']] : [])];
+  const tabs = [['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['purchases','Compras'],['expenses','Despesas'],['workers','Equipe']] : []),['questions','Perguntas'],['selections','Acabamentos'],['inspections','Vistoria e pós-obra']];
   return `
     <button class="back text-button" data-action="back">← Todas as obras</button>
     <section class="project-heading-panel"><div class="project-heading-copy"><span class="eyebrow">ACOMPANHAMENTO DA OBRA</span><h1 data-project-heading tabindex="-1">${esc(p.name)}</h1><p class="detail-address">${icon('pin')}${esc(p.address || 'Endereço não informado')}</p><div class="heading-actions">${badge(p.status)}${isEngineer() ? button('edit-project','Editar obra','','secondary') : ''}</div>${p.description ? `<p class="project-description">${esc(p.description)}</p>` : ''}</div>${buildingScene({ controls: true })}</section>
@@ -297,7 +297,7 @@ function resourceForm(resource, id) {
   }
   if (resource === 'workers') fields = field('name','Nome',item.name) + field('job_title','Função',item.job_title,'text',{max:100}) + field('phone','Telefone',item.phone,'text',{optional:true,max:40}) + field('active','Profissional ativo nesta obra',item.active ?? true,'checkbox');
   if (resource === 'expenses') fields = field('description','Descrição',item.description) + field('category','Categoria',item.category,'text',{max:100}) + field('amount','Valor (R$)',(item.amount_cents||0)/100,'number',{readonly:state.detail.purchases.some(p=>p.expense_id===id)}) + field('expense_date','Data da despesa',item.expense_date || today(),'date') + field('supplier','Fornecedor',item.supplier,'text',{optional:true}) + field('due_date','Vencimento',item.due_date,'date',{optional:true}) + (id ? '<p class="full module-note">A quitação é controlada pelo histórico de pagamentos.</p>' : selectStatus('PENDING',['PENDING','PAID']));
-  modal(`${id ? 'Editar' : 'Adicionar'} ${resource==='materials'?'material':resource==='workers'?'profissional':'despesa'}`, fields, 'Salvar registro', 'Registro interno, disponível apenas para o engenheiro.', async data => {
+  modal(`${id ? 'Editar' : 'Adicionar'} ${resource==='materials'?'material':resource==='workers'?'profissional':'despesa'}`, fields, 'Salvar registro', resource==='materials'?'Cadastre aqui apenas o estoque que já existe. Para uma nova compra com custo, use Registrar compra.':'Registro interno, disponível apenas para o engenheiro.', async data => {
     const input = Object.fromEntries(data);
     if (resource==='materials') {input.quantity = id ? item.quantity : Number(input.quantity);input.minimum_quantity=Number(input.minimum_quantity);}
     if (resource==='expenses') { input.amount = Number(input.amount); if(id) input.status=item.status; }

@@ -42,7 +42,7 @@ export function createWorkflows(ctx) {
     });return result;
   }
   async function handle({path,req,user,body,send}) {
-    const m=path.match(/^\/api\/projects\/([^/]+)\/(reservations|purchases|selections|inspections|movements)(?:\/([^/]+))?(?:\/(release|consume|quotes|order|receive|cancel|options|send|choose|reject|update|close|reopen|reverse))?$/);
+    const m=path.match(/^\/api\/projects\/([^/]+)\/(reservations|purchases|selections|inspections|movements)(?:\/([^/]+))?(?:\/(release|consume|quotes|order|receive|complete|cancel|options|send|choose|reject|update|close|reopen|reverse))?$/);
     if(!m)return false;
     const [,projectId,kind,id,action]=m;
     projectFor(user,projectId);
@@ -83,30 +83,42 @@ export function createWorkflows(ctx) {
         run('UPDATE stock_reservations SET status=?,movement_id=? WHERE id=?',action==='consume'?'CONSUMED':'RELEASED',movementId,id);audit(user,`reservation.${action}`,id);return{ok:true};
       }
       if(kind==='purchases') {
-        if(!id){const mat=material(projectId,input.material_id);run('INSERT INTO purchases(id,project_id,material_id,quantity,needed_date,notes) VALUES(?,?,?,?,?,?)',key,projectId,mat.id,quantity(input.quantity),v.date(input.needed_date,'Necessário até',true),v.text(input.notes,'Observações',2000,true));audit(user,'purchase.created',key);return{id:key};}
-        const row=record('purchases',projectId,id);
-        if(action==='quotes'){
-          if(row.status!=='QUOTING')fail('Cotações bloqueadas após o pedido.');
-          const price=v.cents(input.unit_price,'Preço por unidade',.01),freight=v.cents(input.freight??0,'Frete'),total=Math.round(price*row.quantity)+freight;
-          if(!Number.isSafeInteger(total)||total<1||total>1e11)throw new v.HttpError(400,'Valor total da cotação inválido.');
-          run('INSERT INTO purchase_quotes(id,purchase_id,supplier,unit_price_cents,freight_cents,total_cents,delivery_date,notes) VALUES(?,?,?,?,?,?,?,?)',key,id,v.text(input.supplier,'Fornecedor'),price,freight,total,v.date(input.delivery_date,'Previsão de entrega',true),v.text(input.notes,'Observações',2000,true));audit(user,'purchase.quoted',id);return{id:key};
+        if(action==='cancel'&&id){
+          const row=record('purchases',projectId,id);
+          if(!['QUOTING','ORDERED'].includes(row.status))fail('Compra já registrada ou cancelada.');
+          const reason=v.text(input.reason,'Motivo',1000);
+          run("UPDATE purchases SET status='CANCELLED',notes=notes||? WHERE id=?",`\nCancelamento: ${reason}`,id);audit(user,'purchase.cancelled',id);return{ok:true};
         }
-        if(action==='order'){
-          if(row.status!=='QUOTING')fail('Esta compra já saiu da cotação.');
-          const quote=get('SELECT * FROM purchase_quotes WHERE id=? AND purchase_id=?',v.text(input.quote_id,'Cotação'),id);if(!quote)throw new v.HttpError(400,'Cotação inválida para esta compra.');
-          run("UPDATE purchases SET status='ORDERED',selected_quote_id=? WHERE id=?",quote.id,id);audit(user,'purchase.ordered',id);return{ok:true};
+        if(action||id){
+          if(action!=='complete'||!id)throw new v.HttpError(409,'Cotações foram desativadas. Use Registrar compra.');
+          const previous=record('purchases',projectId,id);
+          if(!['QUOTING','ORDERED'].includes(previous.status))fail('Este registro já foi finalizado.');
+          if(input.material_id!==previous.material_id)throw new v.HttpError(400,'Mantenha o material do registro anterior.');
         }
-        if(action==='receive'){
-          if(row.status!=='ORDERED')fail('Somente pedidos aguardando entrega podem ser recebidos.');
-          const mat=material(projectId,row.material_id),quote=get('SELECT * FROM purchase_quotes WHERE id=?',row.selected_quote_id),date=v.date(input.received_date,'Data do recebimento');
-          const move=movement(user,mat,'ENTRY',row.quantity,row.quantity,date,`Recebimento da compra · ${quote.supplier}`),expense=randomUUID();
-          run("INSERT INTO expenses(id,project_id,description,category,amount_cents,expense_date,status,supplier,due_date) VALUES(?,?,?,?,?,?,'PENDING',?,?)",expense,projectId,`Compra de ${mat.name}`,'Materiais',quote.total_cents,date,quote.supplier,v.date(input.due_date,'Vencimento',true));
-          run("UPDATE purchases SET status='RECEIVED',expense_id=?,movement_id=? WHERE id=?",expense,move,id);audit(user,'purchase.received',id);return{expense_id:expense,movement_id:move};
+        const amount=quantity(input.quantity),price=v.cents(input.unit_price,'Preço unitário',.01),freight=v.cents(input.freight??0,'Frete');
+        const total=Math.round(price*amount)+freight;
+        if(!Number.isSafeInteger(total)||total<1||total>1e11)throw new v.HttpError(400,'Valor total inválido.');
+        const date=v.date(input.purchase_date,'Data da compra'),supplier=v.text(input.supplier,'Fornecedor'),notes=v.text(input.notes,'Observações',2000,true),invoice=v.text(input.invoice_number,'Número da nota',100,true);
+        const status=v.choice(input.payment_status??'PAID',['PAID','PENDING'],'Pagamento'),due=v.date(input.due_date,'Vencimento',true),method=v.text(input.method,'Forma de pagamento',100,true);
+        let mat;
+        if(input.material_id){if(input.new_material)throw new v.HttpError(400,'Escolha um material existente ou cadastre um novo.');mat=material(projectId,input.material_id);}
+        else {
+          const item=input.new_material;
+          if(!item||typeof item!=='object'||Array.isArray(item))throw new v.HttpError(400,'Informe o material comprado.');
+          const name=v.text(item.name,'Material'),unit=v.text(item.unit,'Unidade',30);
+          if(!isUnit(unit))throw new v.HttpError(400,'Escolha a unidade na lista.');
+          const existingMaterials=all('SELECT * FROM materials WHERE project_id=?',projectId),sameName=m=>m.name.trim().toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR');
+          mat=existingMaterials.find(m=>m.unit===unit&&sameName(m));
+          if(!mat&&existingMaterials.some(m=>sameName(m)&&!isUnit(m.unit)))fail('Este material já existe com unidade a corrigir. Escolha a unidade correta em Materiais e use o cadastro existente.');
+          if(!mat){const materialId=randomUUID();run('INSERT INTO materials(id,project_id,name,unit,quantity) VALUES(?,?,?,?,0)',materialId,projectId,name,unit);mat=get('SELECT * FROM materials WHERE id=?',materialId);audit(user,'materials.created',materialId);}
         }
-        if(action==='cancel'){
-          if(!['QUOTING','ORDERED'].includes(row.status))fail('Compra já finalizada.');v.text(input.reason,'Motivo',1000);
-          run("UPDATE purchases SET status='CANCELLED',notes=notes||? WHERE id=?",`\nCancelamento: ${input.reason.trim()}`,id);audit(user,'purchase.cancelled',id);return{ok:true};
-        }
+        const movementId=movement(user,mat,'ENTRY',amount,amount,date,`Compra registrada · ${supplier}${invoice?' · Nota '+invoice:''}`),expenseId=randomUUID();
+        run("INSERT INTO expenses(id,project_id,description,category,amount_cents,expense_date,status,supplier,due_date) VALUES(?,?,?,?,?,?,?,?,?)",expenseId,projectId,`Compra de ${mat.name}`,'Materiais',total,date,status,supplier,status==='PAID'?null:due);
+        if(status==='PAID')run('INSERT INTO expense_payments(id,expense_id,amount_cents,payment_date,method,notes,author_id) VALUES(?,?,?,?,?,?,?)',randomUUID(),expenseId,total,date,method,'Pagamento informado no registro da compra',user.id);
+        const purchaseId=id||key;
+        if(id)run("UPDATE purchases SET quantity=?,status='RECEIVED',expense_id=?,movement_id=?,purchase_date=?,supplier=?,unit_price_cents=?,freight_cents=?,total_cents=?,invoice_number=?,notes=? WHERE id=?",amount,expenseId,movementId,date,supplier,price,freight,total,invoice,notes,id);
+        else run("INSERT INTO purchases(id,project_id,material_id,quantity,status,expense_id,movement_id,purchase_date,supplier,unit_price_cents,freight_cents,total_cents,invoice_number,notes) VALUES(?,?,?,?,'RECEIVED',?,?,?,?,?,?,?,?,?)",purchaseId,projectId,mat.id,amount,expenseId,movementId,date,supplier,price,freight,total,invoice,notes);
+        audit(user,'purchase.registered',purchaseId);return{id:purchaseId,material_id:mat.id,expense_id:expenseId,movement_id:movementId,total_cents:total};
       }
       if(kind==='selections') {
         if(!id){engineer(user);run('INSERT INTO selections(id,project_id,title,location,deadline) VALUES(?,?,?,?,?)',key,projectId,v.text(input.title,'Título'),v.text(input.location,'Ambiente',200,true),v.date(input.deadline,'Prazo',true));audit(user,'selection.created',key);return{id:key};}
