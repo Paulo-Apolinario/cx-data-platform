@@ -1,4 +1,5 @@
 import { icon, buildingScene } from './visuals.js';
+import { units, isUnit } from './units.js';
 import { createOperationsUI } from './operations-ui.js';
 
 const $ = selector => document.querySelector(selector);
@@ -101,13 +102,13 @@ function clientsPage() {
 }
 function projectDetail() {
   const { project: p } = state.detail;
-  const tabs = [['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['questions','Perguntas'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['expenses','Despesas'],['workers','Equipe']] : [])];
+  const tabs = [['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['questions','Perguntas'],['selections','Acabamentos'],['inspections','Vistoria e pós-obra'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['purchases','Compras'],['expenses','Despesas'],['workers','Equipe']] : [])];
   return `
     <button class="back text-button" data-action="back">← Todas as obras</button>
     <section class="project-heading-panel"><div class="project-heading-copy"><span class="eyebrow">ACOMPANHAMENTO DA OBRA</span><h1 data-project-heading tabindex="-1">${esc(p.name)}</h1><p class="detail-address">${icon('pin')}${esc(p.address || 'Endereço não informado')}</p><div class="heading-actions">${badge(p.status)}${isEngineer() ? button('edit-project','Editar obra','','secondary') : ''}</div>${p.description ? `<p class="project-description">${esc(p.description)}</p>` : ''}</div>${buildingScene({ controls: true })}</section>
     ${isEngineer() ? `<section class="client-association ${p.client_id ? '' : 'unassigned'}" aria-labelledby="client-association-title"><span class="client-avatar">${icon('users')}</span><div class="client-association-copy"><span class="eyebrow" id="client-association-title">CLIENTE DA OBRA</span><h2>${esc(p.client_name || 'Esta obra ainda não tem cliente vinculado')}</h2><p>${p.client_id ? esc(p.client_email) : 'Vincule um cadastro existente ou crie o cliente aqui mesmo.'}</p><small>${p.client_id ? 'Acesso às etapas e aos arquivos publicados desta obra.' : 'O vínculo libera o acompanhamento no portal do cliente.'}</small></div>${button('assign-client', `${icon('link')} ${p.client_id ? 'Alterar cliente' : 'Vincular cliente'}`, `data-id="${p.id}"`, p.client_id ? 'secondary' : 'primary')}</section>` : ''}
     <div class="project-summary"><div><small>INÍCIO</small><strong>${day(p.start_date)}</strong></div><div><small>PREVISÃO DE ENTREGA</small><strong>${day(p.end_date)}</strong></div><div><small>ETAPAS CONCLUÍDAS</small><strong>${p.completed_stages} de ${p.stage_count}</strong><small>AVANÇO DA OBRA · ${p.progress}%</small></div>${isEngineer() ? `<div><small>ORÇAMENTO PREVISTO</small><strong>${money(p.budget_cents)}</strong></div>` : ''}</div>
-    <p class="progress-note">O avanço é a média das medições informadas, ponderada pelo peso de cada etapa.</p>
+    <p class="progress-note">O avanço mostra quanto da obra foi executado. As etapas têm a mesma participação, salvo ajuste do engenheiro.</p>
     <div class="tabs" role="tablist" aria-label="Informações da obra">${tabs.map(([tab,label]) => `<button id="tab-${tab}" role="tab" aria-selected="${state.tab === tab}" aria-controls="detail-panel" tabindex="${state.tab === tab ? 0 : -1}" class="${state.tab === tab ? 'active' : ''}" data-action="tab" data-tab="${tab}">${label}</button>`).join('')}</div>
     <section id="detail-panel" class="tab-content" role="tabpanel" aria-labelledby="tab-${state.tab}">${tabContent()}</section>`;
 }
@@ -118,7 +119,7 @@ function tabContent() {
   if (state.tab === 'stages') {
     return `<div class="section-heading"><div><h2>Quadro de obra</h2><p>Do planejamento à conclusão de cada etapa.</p></div>${isEngineer() ? button('tab','Gerenciar no cronograma','data-tab="schedule"','secondary') : ''}</div><div class="board">${['PLANNED','IN_PROGRESS','COMPLETED'].map(status => {
       const stages = state.detail.stages.filter(s => s.status === status);
-      return `<div class="board-column"><h3><span class="status-dot ${status.toLowerCase()}"></span>${labels[status]} <small>${stages.length}</small></h3>${stages.length ? stages.map(s => `<article class="stage-card"><h4>${esc(s.title)}</h4><p>${day(s.start_date)} → ${day(s.end_date)}</p><p>${esc(s.responsible || 'Sem responsável')} · ${s.progress_percent}% · peso ${s.weight}</p>${s.overdue ? '<small class="overdue-label">Prazo vencido</small>' : ''}<small>${state.detail.attachments.filter(a => a.stage_id === s.id).length} anexo(s)</small>${isEngineer() ? `<div class="row-actions">${button('edit-stage','Editar',`data-id="${s.id}"`,'text-button')}${button('delete-resource','Excluir',`data-resource="stages" data-id="${s.id}"`,'text-button danger')}</div>` : ''}</article>`).join('') : '<p class="column-empty">Nenhuma etapa nesta situação.</p>'}</div>`;
+      return `<div class="board-column"><h3><span class="status-dot ${status.toLowerCase()}"></span>${labels[status]} <small>${stages.length}</small></h3>${stages.length ? stages.map(s => `<article class="stage-card"><h4>${esc(s.title)}</h4><p>${day(s.start_date)} → ${day(s.end_date)}</p><p>${esc(s.responsible || 'Sem responsável')} · ${s.progress_percent}% concluído</p>${s.overdue ? '<small class="overdue-label">Prazo vencido</small>' : ''}<small>${state.detail.attachments.filter(a => a.stage_id === s.id).length} anexo(s)</small>${isEngineer() ? `<div class="row-actions">${button('edit-stage','Editar',`data-id="${s.id}"`,'text-button')}${button('delete-resource','Excluir',`data-resource="stages" data-id="${s.id}"`,'text-button danger')}</div>` : ''}</article>`).join('') : '<p class="column-empty">Nenhuma etapa nesta situação.</p>'}</div>`;
     }).join('')}</div>`;
   }
   if (['photos','documents'].includes(state.tab)) return attachmentsPanel();
@@ -275,25 +276,30 @@ function projectForm(edit = false) {
 function stageForm(id) {
   const s = state.detail.stages.find(s=>s.id===id) || {};
   const fields = field('title','Nome da etapa',s.title) + selectStatus(s.status || 'PLANNED',['PLANNED','IN_PROGRESS','COMPLETED'])
-    + field('weight','Peso da etapa',s.weight ?? 1,'number',{min:.001,max:1000,step:.001}) + field('progress_percent','Medição realizada (%)',s.progress_percent ?? 0,'number',{max:100})
+    + field('progress_percent','Etapa concluída (%)',s.progress_percent ?? 0,'number',{max:100}) + `<details class="full advanced-settings"><summary>Avançado: participação no avanço total</summary><p>Por padrão, todas as etapas contam igualmente (valor 1). Valor 2 faz esta etapa contar o dobro de uma etapa com valor 1. Isso não representa quantidade de material nem valor financeiro.</p>${field('weight','Participação relativa',s.weight ?? 1,'number',{min:.001,max:1000,step:.001})}</details>`
     + field('responsible','Responsável',s.responsible,'text',{optional:true})
     + field('start_date','Início previsto',s.start_date,'date',{optional:true}) + field('end_date','Conclusão prevista',s.end_date,'date',{optional:true})
     + field('actual_start','Início real',s.actual_start,'date',{optional:true}) + field('actual_end','Conclusão real',s.actual_end,'date',{optional:true});
-  modal(id ? 'Editar etapa' : 'Nova etapa', fields, 'Salvar etapa', 'Use 0% para planejada e 100% para concluída. O peso define a participação da etapa no avanço da obra.', async data => {
+  modal(id ? 'Editar etapa' : 'Nova etapa', fields, 'Salvar etapa', 'Informe quanto desta etapa já foi executado: 0% = não iniciada; 50% = metade pronta; 100% = concluída. A situação acompanha o percentual.', async data => {
     const input=Object.fromEntries(data); input.weight=Number(input.weight);input.progress_percent=Number(input.progress_percent);
     await api(`/projects/${state.projectId}/stages${id?`/${id}`:''}`,{method:id?'PATCH':'POST',body:input}); await refresh();
   });
+  $('#modal-form [name=progress_percent]').addEventListener('input',event=>{const n=Number(event.target.value);$('#modal-form [name=status]').value=n===100?'COMPLETED':n>0?'IN_PROGRESS':'PLANNED';});
   $('#modal-form [name=status]').addEventListener('change',event=>{const progress=$('#modal-form [name=progress_percent]');if(event.target.value==='COMPLETED')progress.value=100;else if(event.target.value==='PLANNED'||Number(progress.value)===100)progress.value=0;});
 }
 function resourceForm(resource, id) {
   const item = state.detail[resource].find(i=>i.id===id) || {};
   let fields;
-  if (resource === 'materials') fields = field('name','Material',item.name) + field('unit','Unidade (kg, m², un…)',item.unit,'text',{readonly:!!id && /\p{L}/u.test(item.unit)}) + `<p class="full module-note">Unidade é a medida: un, saco, kg, m² ou m³. Exemplo: 150 sacos = saldo inicial 150 e unidade saco.${id&&!/\p{L}/u.test(item.unit)?' Corrija a unidade antiga; o saldo e o histórico serão preservados, sem conversão de quantidades.':''}</p>` + (id ? `<p class="full module-note">Saldo atual: ${item.quantity.toLocaleString('pt-BR')} ${esc(item.unit)}. Use Movimentar para alterar o saldo.</p>` : field('quantity','Saldo inicial',0,'number',{step:.001})) + field('notes','Observações',item.notes,'textarea',{max:2000});
+  if (resource === 'materials') {
+    const fixed=!!id&&isUnit(item.unit);
+    const unitPicker=`<label>Unidade de medida<select name="unit" aria-label="Unidade de medida" required ${fixed?'disabled':''}><option value="">Selecione a unidade</option>${units.map(([value,label])=>`<option value="${esc(value)}" ${item.unit===value?'selected':''}>${esc(label)}</option>`).join('')}</select></label>${fixed?`<input type="hidden" name="unit" value="${esc(item.unit)}">`:''}`;
+    fields=field('name','Material',item.name)+unitPicker+(id?`<p class="full module-note">Saldo registrado: ${item.quantity.toLocaleString('pt-BR')}${fixed?' '+esc(item.unit):'. Escolha a unidade correta acima; as quantidades não serão convertidas.'}. Para corrigir lançamentos, use Estornar no histórico.</p>`:field('quantity','Quantidade que já existe na obra',0,'number',{step:.001}))+field('minimum_quantity','Estoque mínimo para alerta',item.minimum_quantity??0,'number',{step:.001})+field('notes','Observações',item.notes,'textarea',{max:2000});
+  }
   if (resource === 'workers') fields = field('name','Nome',item.name) + field('job_title','Função',item.job_title,'text',{max:100}) + field('phone','Telefone',item.phone,'text',{optional:true,max:40}) + field('active','Profissional ativo nesta obra',item.active ?? true,'checkbox');
-  if (resource === 'expenses') fields = field('description','Descrição',item.description) + field('category','Categoria',item.category,'text',{max:100}) + field('amount','Valor (R$)',(item.amount_cents||0)/100,'number') + field('expense_date','Data da despesa',item.expense_date || today(),'date') + field('supplier','Fornecedor',item.supplier,'text',{optional:true}) + field('due_date','Vencimento',item.due_date,'date',{optional:true}) + (id ? '<p class="full module-note">A quitação é controlada pelo histórico de pagamentos.</p>' : selectStatus('PENDING',['PENDING','PAID']));
+  if (resource === 'expenses') fields = field('description','Descrição',item.description) + field('category','Categoria',item.category,'text',{max:100}) + field('amount','Valor (R$)',(item.amount_cents||0)/100,'number',{readonly:state.detail.purchases.some(p=>p.expense_id===id)}) + field('expense_date','Data da despesa',item.expense_date || today(),'date') + field('supplier','Fornecedor',item.supplier,'text',{optional:true}) + field('due_date','Vencimento',item.due_date,'date',{optional:true}) + (id ? '<p class="full module-note">A quitação é controlada pelo histórico de pagamentos.</p>' : selectStatus('PENDING',['PENDING','PAID']));
   modal(`${id ? 'Editar' : 'Adicionar'} ${resource==='materials'?'material':resource==='workers'?'profissional':'despesa'}`, fields, 'Salvar registro', 'Registro interno, disponível apenas para o engenheiro.', async data => {
     const input = Object.fromEntries(data);
-    if (resource==='materials') input.quantity = id ? item.quantity : Number(input.quantity);
+    if (resource==='materials') {input.quantity = id ? item.quantity : Number(input.quantity);input.minimum_quantity=Number(input.minimum_quantity);}
     if (resource==='expenses') { input.amount = Number(input.amount); if(id) input.status=item.status; }
     if (resource==='workers') input.active = data.has('active');
     await api(`/projects/${state.projectId}/${resource}${id?`/${id}`:''}`,{method:id?'PATCH':'POST',body:input}); await refresh();

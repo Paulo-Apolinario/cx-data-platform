@@ -211,6 +211,23 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
             return send(200, { ok: true });
           }
         }
+        match = path.match(/^\/api\/projects\/([^/]+)\/inspections\/([^/]+)\/photo$/);
+        if(match&&req.method==='POST') {
+          const [,projectId,inspectionId]=match;
+          const authorize=()=>{const project=projectFor(user,projectId),ticket=get('SELECT * FROM inspections WHERE id=? AND project_id=?',inspectionId,projectId);if(!ticket||user.role==='CLIENT'&&ticket.client_id!==user.id)throw new v.HttpError(404,'Pendência não encontrada.');if(user.role==='CLIENT'&&project.client_id!==ticket.client_id)throw new v.HttpError(404,'Pendência não encontrada.');if(ticket.status==='CLOSED')throw new v.HttpError(409,'Reabra a pendência antes de adicionar fotos.');return ticket;};
+          authorize();const input=await body(req),id=input.request_id??randomUUID();
+          if(typeof id!=='string'||!/^[a-f0-9-]{36}$/i.test(id))throw new v.HttpError(400,'Identificador inválido.');
+          const name=v.text(input.file_name,'Nome do arquivo',200).replace(/[\\/\x00-\x1f\x7f]/g,'_');
+          if(typeof input.file_base64!=='string'||input.file_base64.length%4||!/^[A-Za-z0-9+/]*={0,2}$/.test(input.file_base64))throw new v.HttpError(400,'Arquivo inválido.');
+          const bytes=Buffer.from(input.file_base64,'base64'),mime=fileType(bytes);
+          if(!bytes.length||bytes.length>MAX_FILE||!mime?.startsWith('image/'))throw new v.HttpError(400,'Use foto JPG, PNG ou WebP de até 8 MB.');
+          const existing=get('SELECT * FROM attachments WHERE id=?',id);
+          if(existing){const ticket=authorize();if(!JSON.parse(ticket.attachment_ids_json).includes(id)||existing.project_id!==projectId||existing.file_name!==name||!readFileSync(resolve(uploads,id)).equals(bytes))throw new v.HttpError(409,'Identificador já utilizado.');return send(201,{id});}
+          writeFileSync(resolve(uploads,id),bytes,{flag:'wx',mode:0o600});
+          try {transaction(()=>{const ticket=authorize(),ids=JSON.parse(ticket.attachment_ids_json);if(ids.length>=10)throw new v.HttpError(409,'Esta pendência já tem dez fotos.');run("INSERT INTO attachments(id,project_id,kind,title,location,record_date,visible_to_client,file_name,mime_type,size) VALUES(?,?,'PHOTO',?,?,?,1,?,?,?)",id,projectId,`Pendência: ${ticket.title}`,ticket.location,new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date()),name,mime,bytes.length);run('UPDATE inspections SET attachment_ids_json=? WHERE id=?',JSON.stringify([...ids,id]),inspectionId);audit(user,'inspection.photo.added',inspectionId);});}
+          catch(error){unlinkSync(resolve(uploads,id));throw error;}
+          return send(201,{id});
+        }
         match = path.match(/^\/api\/projects\/([^/]+)\/attachments$/);
         if (match && req.method === 'POST') {
           engineer(user); const projectId = match[1]; projectFor(user, projectId);
@@ -251,7 +268,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
           }
           if (!match[2] && req.method === 'DELETE') {
             engineer(user);
-            if (get('SELECT id FROM expense_payments WHERE receipt_id=?', attachment.id) || get('SELECT d.id FROM diary_entries d, json_each(d.attachment_ids_json) j WHERE j.value=?', attachment.id) || get("SELECT r.id FROM diary_revisions r, json_each(json_extract(r.snapshot_json,'$.attachment_ids_json')) j WHERE j.value=?", attachment.id)) throw new v.HttpError(409, 'Arquivo vinculado a diário ou pagamento. Preserve o histórico.');
+            if (get('SELECT id FROM selection_options WHERE image_id=?',attachment.id) || get('SELECT i.id FROM inspections i,json_each(i.attachment_ids_json) j WHERE j.value=?',attachment.id) || get('SELECT id FROM expense_payments WHERE receipt_id=?', attachment.id) || get('SELECT d.id FROM diary_entries d, json_each(d.attachment_ids_json) j WHERE j.value=?', attachment.id) || get("SELECT r.id FROM diary_revisions r, json_each(json_extract(r.snapshot_json,'$.attachment_ids_json')) j WHERE j.value=?", attachment.id)) throw new v.HttpError(409, 'Arquivo vinculado a diário ou pagamento. Preserve o histórico.');
             transaction(() => { run('DELETE FROM attachments WHERE id=?', attachment.id); audit(user, 'attachment.deleted', attachment.id); });
             try { unlinkSync(resolve(uploads, attachment.id)); } catch (error) { console.error('Limpeza de arquivo:', error.code); }
             return send(200, { ok: true });
@@ -259,7 +276,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
         }
         throw new v.HttpError(404, 'Recurso não encontrado.');
       }
-      const staticFiles = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/operations-ui.js': ['operations-ui.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
+      const staticFiles = { '/units.js':['units.js','text/javascript'], '/workflows-ui.js':['workflows-ui.js','text/javascript'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/operations-ui.js': ['operations-ui.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
       if (req.method !== 'GET' || !staticFiles[path]) throw new v.HttpError(404, 'Página não encontrada.');
       const [file, type] = staticFiles[path];
       res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` }); res.end(readFileSync(resolve(PUBLIC, file)));

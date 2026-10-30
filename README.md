@@ -22,7 +22,11 @@ de CX está arquivada em `legacy/cx-events/` e não faz parte do sistema atual.
 - Relatório do diário por período, pronto para imprimir ou salvar em PDF pelo navegador.
 - Materiais com saldo inicial, entradas, consumo, perdas e transferência entre obras.
 - Financeiro com fornecedor, vencimento, pagamentos parciais, comprovantes e estornos.
-- Cronograma com pesos, medição por etapa, responsáveis e datas previstas/reais.
+- Cronograma com percentual concluído, responsáveis, datas previstas/reais e participação avançada opcional.
+- Unidades de material por lista, prévia de saldo, estorno de movimentos, mínimo e reservas.
+- Compras/cotações com comparação de totais e recebimento integrado ao estoque e financeiro.
+- Acabamentos com opções, fotos, adicionais e decisão do cliente.
+- Vistoria/pós-obra com fotos enviadas pelo cliente, atendimento, conferência e reabertura.
 - Solicitações de alteração e custos adicionais, com aprovação ou recusa pelo cliente.
 - Cadastro de profissionais por obra e indicadores de orçamento, pago e valores em atraso.
 - Portal do cliente, sem acesso a outras obras ou aos cadastros internos.
@@ -94,14 +98,16 @@ engenheiro. A aplicação web se adapta ao celular; não há aplicativo nativo/o
   **Movimentar** para entradas, consumo, perdas ou transferência. Para transferir,
   cadastre o material na outra obra com a mesma unidade e selecione-o como destino.
   Saída e entrada são registradas juntas. Saldos não ficam negativos e históricos
-  não são apagados. Correções de quantidade exigem um novo movimento com justificativa.
+  não são apagados. Lançamentos manuais incorretos podem ser estornados com justificativa e registrados novamente. Compras recebidas e uso de reservas mantêm seus vínculos e não permitem estorno isolado.
 - **Despesas:** registre fornecedor, categoria, valor e vencimento. Use **Pagar**
   para registrar pagamentos parciais, escolhendo comprovantes da aba Documentos.
   **Pagamentos** mostra o histórico e permite estornar com justificativa. Registros
   com histórico de pagamentos não podem ser excluídos. O realizado soma despesas
   registradas; o pago soma pagamentos não estornados, sem duplicar os valores.
-- **Cronograma:** configure peso, medição de 0 a 100%, responsável e datas de cada
-  etapa. O avanço é `soma(peso × medição) / soma(pesos)`, arredondado ao inteiro.
+- **Cronograma:** informe o percentual concluído (0 a 100%), responsável e datas da
+  etapa. Todas contam igualmente por padrão; a participação relativa está em
+  **Avançado**. O avanço é `soma(participação × percentual) / soma(participações)`,
+  arredondado ao inteiro.
   Planejada exige 0%; concluída exige 100%. Datas reais são opcionais; a conclusão
   real exige início real e situação concluída. Prazos vencidos são destacados.
 - **Aprovações:** crie e revise o rascunho, depois envie ao portal do cliente
@@ -172,9 +178,42 @@ somente para consulta do engenheiro e não são transferidas ao novo cliente.
 **Nova etapa** fica apenas no **Cronograma**. O quadro apresenta as mesmas etapas
 por situação e oferece um atalho para gerenciá-las no cronograma.
 
-Em Materiais, informe a medida no campo unidade (por exemplo, `saco`, `un`, `kg`,
-`m²`, `m³`) e a quantidade no saldo inicial. Unidades antigas numéricas aparecem
+Em Materiais, escolha a unidade na lista (por exemplo, `saco`, `un`, `kg`,
+`m²`, `m³`) e informe separadamente a quantidade que já existe na obra. Valores
+antigos fora da lista, inclusive `1000 un`, aparecem
 como **Unidade a corrigir**. Use **Editar cadastro** para corrigir a medida; isso
 preserva as quantidades e o histórico, sem conversão ou suposição sobre os valores.
 Unidades válidas continuam protegidas contra troca para impedir conversões falsas.
 A migração 3 cria as tabelas de conversas automaticamente no próximo início.
+
+### Estoque, compras, acabamentos e pós-obra
+
+- **Entradas e retiradas:** use Registrar entrada para material que chegou. Para
+  material utilizado, use Registrar retirada. A prévia mostra o saldo que ficará.
+  Exemplo: 1.000 un − 400 un − 100 un = 500 un. Não transforme lançamentos antigos
+  automaticamente: se foram entradas por engano, estorne cada uma com motivo e
+  registre as retiradas corretas. O estorno é um movimento contrário auditado.
+- **Reservas:** Na obra é o saldo físico; Reservado é o que foi separado para
+  serviços; Livre para usar = Na obra − Reservado. Registrar uso dá baixa uma vez.
+  Liberar reserva apenas devolve a quantidade ao saldo livre. Estoque mínimo gera
+  alerta quando o saldo livre fica abaixo do mínimo configurado.
+- **Compras:** solicite um material, adicione cotações com preço por unidade,
+  frete e data de entrega, compare os totais e escolha um fornecedor. As cotações
+  são cadastradas manualmente; o sistema não contata fornecedores. Ao receber o
+  pedido completo, a entrada e a despesa a pagar são criadas na mesma transação.
+  Não lance esses registros novamente nas outras abas. O recebimento não quita a
+  despesa; pagamentos continuam na aba Despesas. Compras finalizadas preservam
+  seus vínculos, valores e histórico. Recebimento parcial e devolução de compra
+  ainda não estão disponíveis; registre o recebimento somente quando tudo chegar.
+- **Acabamentos:** crie um rascunho por ambiente, adicione opções e fotos de
+  referência do mapa fotográfico, depois envie ao cliente. Fotos precisam estar
+  publicadas. O cliente escolhe uma opção ou recusa as propostas. A decisão fica
+  imutável; adicionais não alteram o orçamento nem criam despesa automaticamente.
+- **Vistoria e pós-obra:** cliente ou engenheiro registra a pendência; podem anexar
+  até dez fotos JPG/PNG/WebP de até 8 MB cada. O engenheiro informa responsável,
+  prazo e andamento; após Correção realizada, o cliente ou engenheiro confere e
+  encerra. Se necessário, reabra com justificativa. O histórico não é apagado.
+  Registros pertencem ao cliente vinculado na criação e não passam a outro titular.
+
+A migração 4 adiciona essas estruturas automaticamente e preserva os dados
+anteriores. Faça backup de DATA_DIR com o servidor parado antes de atualizar.

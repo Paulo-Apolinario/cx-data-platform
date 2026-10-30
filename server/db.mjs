@@ -147,5 +147,61 @@ export function openDatabase(dataDir) {
       INSERT INTO migrations(version) VALUES(3);
     COMMIT;`);
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version = 4').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      ALTER TABLE materials ADD COLUMN minimum_quantity REAL NOT NULL DEFAULT 0 CHECK(minimum_quantity>=0);
+      ALTER TABLE material_movements ADD COLUMN reverses_id TEXT REFERENCES material_movements(id);
+      CREATE UNIQUE INDEX movement_reversal ON material_movements(reverses_id) WHERE reverses_id IS NOT NULL;
+      CREATE TABLE stock_reservations (
+        id TEXT PRIMARY KEY, material_id TEXT NOT NULL REFERENCES materials(id),
+        stage_id TEXT REFERENCES stages(id), purpose TEXT NOT NULL, quantity REAL NOT NULL CHECK(quantity>0),
+        status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','CONSUMED','RELEASED')),
+        movement_id TEXT REFERENCES material_movements(id), author_id TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE purchases (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), material_id TEXT NOT NULL REFERENCES materials(id),
+        quantity REAL NOT NULL CHECK(quantity>0), needed_date TEXT, notes TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'QUOTING' CHECK(status IN ('QUOTING','ORDERED','RECEIVED','CANCELLED')),
+        selected_quote_id TEXT REFERENCES purchase_quotes(id), expense_id TEXT REFERENCES expenses(id),
+        movement_id TEXT REFERENCES material_movements(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE purchase_quotes (
+        id TEXT PRIMARY KEY, purchase_id TEXT NOT NULL REFERENCES purchases(id), supplier TEXT NOT NULL,
+        unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents>0), freight_cents INTEGER NOT NULL CHECK(freight_cents>=0),
+        total_cents INTEGER NOT NULL CHECK(total_cents>0), delivery_date TEXT, notes TEXT NOT NULL DEFAULT ''
+      );
+      CREATE TABLE selections (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), client_id TEXT REFERENCES users(id),
+        title TEXT NOT NULL, location TEXT NOT NULL DEFAULT '', deadline TEXT,
+        status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','PENDING','SELECTED','REJECTED','CANCELLED')),
+        selected_option_id TEXT REFERENCES selection_options(id), decided_by TEXT REFERENCES users(id),
+        decided_at TEXT, decision_note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE selection_options (
+        id TEXT PRIMARY KEY, selection_id TEXT NOT NULL REFERENCES selections(id), title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '', amount_cents INTEGER NOT NULL DEFAULT 0 CHECK(amount_cents>=0),
+        image_id TEXT REFERENCES attachments(id)
+      );
+      CREATE TABLE inspections (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), client_id TEXT REFERENCES users(id),
+        title TEXT NOT NULL, description TEXT NOT NULL, location TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','IN_PROGRESS','RESOLVED','CLOSED')),
+        responsible TEXT NOT NULL DEFAULT '', due_date TEXT, attachment_ids_json TEXT NOT NULL DEFAULT '[]',
+        created_by TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE inspection_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, inspection_id TEXT NOT NULL REFERENCES inspections(id),
+        status TEXT NOT NULL, note TEXT NOT NULL, author_id TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE operation_requests (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL);
+      CREATE INDEX reservations_material ON stock_reservations(material_id,status);
+      CREATE INDEX purchases_project ON purchases(project_id);
+      CREATE INDEX selections_project ON selections(project_id,client_id);
+      CREATE INDEX inspections_project ON inspections(project_id,client_id);
+      INSERT INTO migrations(version) VALUES(4);
+    COMMIT;`);
+  }
   return db;
 }

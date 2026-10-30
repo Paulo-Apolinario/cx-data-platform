@@ -41,7 +41,7 @@ test('operações de obra: saldos, pagamentos, diário, medição e aceite',asyn
       const detail=(await req(base)).data;
       assert.equal(detail.project.progress,63);assert.equal(detail.project.completed_stages,1);assert.equal(detail.project.overdue_stages,1);
       assert.equal(detail.stages.find(s=>s.title==='Estrutura').overdue,true);
-      for(const data of [{title:'Inválida',status:'PLANNED',progress_percent:10},{title:'Inválida',weight:0},{title:'Inválida',status:'COMPLETED',progress_percent:90},{title:'Inválida',status:'IN_PROGRESS',actual_end:date}])assert.equal((await req(base+'/stages','POST',data)).status,400);
+      for(const data of [{title:'Inválida',status:'PLANNED',progress_percent:10},{title:'Inválida',weight:0},{title:'Inválida',status:'COMPLETED',progress_percent:90},{title:'Inválida',status:'IN_PROGRESS',actual_end:date},{title:'Não iniciada com data real',status:'PLANNED',actual_start:date}])assert.equal((await req(base+'/stages','POST',data)).status,400);
       assert.equal((await req(base+'/stages','POST',{title:'Proibida'},'client')).status,403);
     });
     await t.test('entrada idempotente, consumo, perdas e proteção de saldo',async()=>{
@@ -216,6 +216,6 @@ test('migração v1 preserva saldos, pagamentos e medições sem duplicar em rei
     db.close();db=openDatabase(dir);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM material_movements').get().n,1);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM expense_payments').get().n,1);
-    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3]);
+    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3,4]);
   } finally {db.close();rmSync(dir,{recursive:true,force:true});}
 });

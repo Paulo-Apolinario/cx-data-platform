@@ -190,3 +190,54 @@ Não há exclusão/edição de mensagens, envio externo ou polling automático.
 Materiais com unidade numérica legada podem ter somente o rótulo corrigido,
 com auditoria específica, sem mudar saldo ou movimentos. A validação exige pelo
 menos uma letra; unidades válidas continuam imutáveis. Não há conversão automática.
+
+## Fluxos operacionais (migração 4)
+
+O catálogo de unidades é compartilhado em `public/units.js` e validado no servidor.
+Campos textuais antigos não pertencentes à lista exigem seleção explícita, sem
+converter quantidades. Unidades válidas continuam imutáveis no cadastro.
+
+`server/workflows.mjs` implementa operações transacionais e `public/workflows-ui.js`
+fornece as telas. `operation_requests` guarda o fingerprint por usuário/caminho e
+corpo, além do resultado, para reenvio idempotente com `request_id` estável. As
+permissões são verificadas antes de devolver resultados anteriores e novamente
+na transação. O cliente nunca recebe compras, estoque ou reservas.
+
+Rotas abaixo recebem POST e são relativas a `/api/projects/:project`:
+
+| Rota | Regra |
+| --- | --- |
+| `/movements/:id/reverse` | Estorna entrada/consumo/perda manual com justificativa; não reverte transferências, recebimentos ou uso de reservas isoladamente. |
+| `/reservations` | Reserva saldo livre, opcionalmente para uma etapa da mesma obra. |
+| `/reservations/:id/consume` | Cria saída e finaliza a reserva na mesma transação. |
+| `/reservations/:id/release` | Libera a reserva sem movimentação física. |
+| `/purchases` | Solicita compra de material da própria obra. |
+| `/purchases/:id/quotes` | Cotação manual com preço unitário, frete e total calculado no servidor. |
+| `/purchases/:id/order` | Fixa a cotação e bloqueia novas propostas. |
+| `/purchases/:id/receive` | Recebe todo o pedido uma única vez e cria entrada mais despesa pendente atomicamente. |
+| `/purchases/:id/cancel` | Cancela somente antes do recebimento; exige motivo. |
+| `/selections` e `/selections/:id/options` | Rascunho do engenheiro e opções de acabamento com foto/adicional. |
+| `/selections/:id/send` | Fixa destinatário atual, exige opções e fotos publicadas. |
+| `/selections/:id/choose` ou `/reject` | Decisão única pelo destinatário que continua titular. |
+| `/selections/:id/cancel` | Somente engenheiro, rascunho ou pendente. |
+| `/inspections` | Abre pendência vinculada ao titular atual; sem cliente, fica interna. |
+| `/inspections/:id/update` | Engenheiro registra andamento, responsável, prazo e nota. |
+| `/inspections/:id/close` ou `/reopen` | Conferência após correção ou reabertura com nota; titular ou engenheiro. |
+| `/inspections/:id/photo` | Upload autorizado e idempotente de foto, até dez por pendência; mesma proteção de formatos/tamanho dos anexos. |
+
+GET nas coleções (exceto movements) retorna somente dados autorizados. Todas as
+coleções também integram o detalhe da obra. Fotos de pendências são publicadas
+na obra e protegidas contra exclusão. Fotos posteriormente tornadas internas
+somem das respostas do cliente. A escolha de acabamento não modifica o orçamento
+nem cria despesa. Troca de titular não transfere escolhas/pendências anteriores.
+
+Saldo físico = soma dos deltas; saldo livre = físico − reservas ativas. Toda
+retirada ou transferência considera o livre dentro da transação. Estornos usam
+`reverses_id` único e movimento compensatório; histórico original permanece.
+Materiais ou despesas usados por compras não podem ser apagados; valores de
+recebimentos são protegidos contra edição isolada. Etapas referidas por reservas
+não podem ser excluídas. A apresentação do histórico segue a ordem de registro.
+
+Limites: cotação manual, recebimento completo (sem parcial/devolução), sem contato
+externo automático, assinatura digital ou cobrança a partir de escolhas. Não há
+conversão de unidades nem ajuste automático de lançamentos antigos ambíguos.
