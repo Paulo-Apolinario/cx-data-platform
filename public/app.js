@@ -75,12 +75,30 @@ function projectsPage() {
       <article><div class="stat-label">Em andamento${icon('calendar')}</div><strong>${String(active).padStart(2, '0')}</strong><small>Execução e acompanhamento</small></article>
       <article><div class="stat-label">${isEngineer() ? 'Despesas registradas' : 'Obras concluídas'}${icon(isEngineer() ? 'wallet' : 'check')}</div><strong>${isEngineer() ? money(expenses) : String(completed).padStart(2, '0')}</strong><small>${isEngineer() ? 'Valores pagos e pendentes' : 'Empreendimentos entregues'}</small></article>
     </div>
+    ${state.page==='overview'?attentionPanel():''}
     <section class="section"><div class="section-heading"><div><span class="eyebrow">PORTFÓLIO</span><h2>Seus empreendimentos</h2><p>Entre em uma obra para acompanhar cada detalhe.</p></div>
       <label class="search-label">${icon('search')}<span class="sr-only">Buscar obra, endereço ou cliente</span><input id="project-search" type="search" placeholder="Buscar obra${isEngineer() ? ' ou cliente' : ''}…" value="${esc(state.search)}"></label></div>
       <div id="project-grid" class="project-grid">${projectCards()}</div>
     </section>`;
 }
 
+function attentionPanel(){
+  const items=[];
+  for(const p of state.projects){
+    const add=(count,label,tab)=>{if(count)items.push({id:p.id,name:p.name,label,tab});};
+    if(isEngineer()){
+      add(p.overdue_stages,`${p.overdue_stages} etapa(s) com prazo vencido`,'schedule');
+      add(p.overdue_cents,`${money(p.overdue_cents)} em contas vencidas`,'expenses');
+      add(p.low_stock_count,`${p.low_stock_count} material(is) com estoque baixo`,'materials');
+      add(p.questions_waiting,`${p.questions_waiting} pergunta(s) sem resposta`,'questions');
+      add(p.inspections_overdue,`${p.inspections_overdue} pendência(s) de vistoria atrasada(s)`,'inspections');
+    } else {
+      add(p.decisions_pending,`${p.decisions_pending} solicitação(ões) para decidir`,'approvals');
+      add(p.selections_pending,`${p.selections_pending} escolha(s) de acabamento pendente(s)`,'selections');
+    }
+  }
+  return `<section class="attention-panel" aria-labelledby="attention-title"><div class="section-heading"><div><span class="eyebrow">PRÓXIMAS AÇÕES</span><h2 id="attention-title">${isEngineer()?'O que precisa de atenção':'Suas decisões pendentes'}</h2><p>Com base nos registros atuais das suas obras.</p></div>${button('refresh-dashboard','Atualizar','','secondary')}</div>${items.length?`<div class="attention-list">${items.map(i=>`<button class="attention-item" data-action="attention-open" data-id="${i.id}" data-tab="${i.tab}"><strong>${esc(i.name)}</strong><span>${esc(i.label)} →</span></button>`).join('')}</div>`:'<p class="module-note">Nenhuma pendência identificada nestes indicadores.</p>'}</section>`;
+}
 function projectCards() {
   const search = state.search.toLocaleLowerCase('pt-BR');
   const projects = state.projects.filter(p => `${p.name} ${p.address} ${p.client_name || ''}`.toLocaleLowerCase('pt-BR').includes(search));
@@ -89,7 +107,7 @@ function projectCards() {
     <article class="project-card">
       <div class="project-cover">${buildingScene({ compact: true })}<div class="cover-status">${badge(p.status)}</div><span class="cover-caption">VOLUME ILUSTRATIVO</span></div>
       <div class="project-card-body"><h3>${esc(p.name)}</h3><p class="address">${icon('pin')}${esc(p.address || 'Endereço ainda não informado')}</p>
-        <div class="progress-caption"><span>Avanço ponderado</span><strong>${p.progress}%</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
+        <div class="progress-caption"><span>Avanço da obra</span><strong>${p.progress}%</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
         ${isEngineer() ? `<div class="card-client ${p.client_id ? '' : 'unassigned'}"><span class="client-avatar">${icon('users')}</span><div><small>CLIENTE DA OBRA</small><strong>${esc(p.client_name || 'Vincule o cliente desta obra')}</strong></div><button class="icon-button" data-action="assign-client" data-id="${p.id}" aria-label="${esc(p.client_id ? `Alterar cliente de ${p.name}` : `Vincular cliente a ${p.name}`)}">${icon(p.client_id ? 'link' : 'plus')}</button></div>` : ''}
         <div class="card-facts"><div><small>PREVISÃO DE ENTREGA</small><span>${day(p.end_date)}</span></div><div><small>ETAPAS</small><span>${p.completed_stages} de ${p.stage_count}</span></div></div>
         <a class="card-open" href="#obra=${p.id}" data-action="open-project" data-id="${p.id}" aria-label="Acompanhar obra: ${esc(p.name)}">Acompanhar obra ${icon('arrow')}</a>
@@ -180,7 +198,7 @@ async function openProject(id, changeHistory = true) {
   const request = ++projectRequest;
   const detail = await api(`/projects/${id}`);
   if (request !== projectRequest) return;
-  Object.assign(state,{projectId:id,detail,page:'projects',tab:'stages',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all',diaryFrom:'',diaryTo:''});
+  Object.assign(state,{projectId:id,detail,page:'projects',tab:'stages',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all',diaryFrom:'',diaryTo:'',materialSearch:'',materialFilter:'all',materialHistoryId:''});
   if (changeHistory) history.pushState(null,'',`#obra=${id}`);
   render(); window.scrollTo(0,0); $('[data-project-heading]').focus({preventScroll:true});
 }
@@ -324,6 +342,8 @@ document.addEventListener('click', async event => {
   const { action, id, resource } = target.dataset;
   try {
     if (operationsUI.handles(action)) { event.preventDefault(); await operationsUI.action(action,target); return; }
+    if(action==='refresh-dashboard')return refresh();
+    if(action==='attention-open'){await openProject(id);if(state.projectId!==id)return;state.tab=target.dataset.tab;render();return;}
     if (action==='close-modal') return $('#modal').close();
     if (action==='navigate' || action==='back') { projectRequest++; state.page=target.dataset.page || 'projects'; state.projectId=null; state.detail=null; history.pushState(null,'',`#${state.page}`); render(); window.scrollTo(0,0); return; }
     if (action==='logout') { projectRequest++;await api('/auth/logout',{method:'POST',body:{}});state.clients=[];$('#modal').close();$('#modal').replaceChildren();$('#print-report')?.remove(); state.user=null; state.projects=[]; state.detail=null; state.projectId=null; history.replaceState(null,'','#overview'); render(); return; }

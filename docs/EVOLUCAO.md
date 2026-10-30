@@ -14,6 +14,13 @@
 | Perguntas | Conversas por obra, histórico de mensagens, autor/data, indicação de resposta e isolamento por cliente. |
 | Aprovações | Rascunho, envio ao portal, bloqueio do conteúdo enviado, aceite/recusa do cliente, autor/data e histórico preservado. |
 
+## Revisão funcional
+
+Correção integral de compra com estorno coordenado, atenção por perfil na visão geral,
+isolamento de filtros, bloqueio de material duplicado, avanço coerente, preservação
+de equipe histórica e validação de ações da API. Casos detalhados em
+[REVISAO_CASOS_DE_USO.md](REVISAO_CASOS_DE_USO.md).
+
 ## Evoluções ainda propostas
 
 - Revisões e categorias de documentos, versão vigente e validade.

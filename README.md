@@ -232,3 +232,19 @@ ações. Histórico e reservas são recolhidos por padrão e podem ser consultad
 
 A migração 5 preserva compras e saldos anteriores, sem repetir despesas, pagamentos
 ou movimentos. Nenhum registro antigo pendente vira compra automaticamente.
+
+### Revisão funcional (migração 6)
+
+A Visão geral reúne pendências existentes por obra e dá acesso direto à tela de
+resolução. Engenheiro e cliente têm indicadores diferentes, preservando dados
+internos. Filtros de materiais reiniciam ao abrir outra obra; cadastros repetidos
+na mesma unidade são bloqueados; 100% de avanço exige todas as etapas concluídas.
+Profissionais citados no histórico do diário devem ser inativados em vez de excluídos.
+
+Em Compras, **Corrigir compra** abre um estorno integral justificado. Exige saldo
+livre para toda a quantidade; desfaz estoque, custo e pagamentos no sistema,
+preservando os originais e devolvendo o custo ao saldo do orçamento. Depois registre
+a compra correta. Não movimenta dinheiro no banco nem substitui devolução física
+parcial ao fornecedor. Despesas canceladas não aceitam novos pagamentos/edições.
+
+Veja [casos de uso, ajustes verificados e próximas funções propostas](docs/REVISAO_CASOS_DE_USO.md).

@@ -31,9 +31,9 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
     return row;
   }
   function expenseView(row) {
-    const paidCents = paid(row.id), outstanding = row.amount_cents - paidCents;
+    const paidCents = row.voided_at?0:paid(row.id), outstanding = row.voided_at?0:row.amount_cents - paidCents;
     return { ...row, paid_cents: paidCents, outstanding_cents: outstanding,
-      payment_state: outstanding === 0 ? 'PAID' : paidCents > 0 ? 'PARTIAL' : 'PENDING',
+      payment_state: row.voided_at?'CANCELLED':outstanding === 0 ? 'PAID' : paidCents > 0 ? 'PARTIAL' : 'PENDING',
       overdue: outstanding > 0 && !!row.due_date && row.due_date < workToday() };
   }
   function stageView(row) {
@@ -43,11 +43,12 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
   function summary(projectId) {
     const stages = all('SELECT * FROM stages WHERE project_id=?', projectId);
     const weight = stages.reduce((sum,s) => sum + s.weight,0);
-    return { progress: weight ? Math.round(stages.reduce((sum,s) => sum + s.weight*s.progress_percent,0)/weight) : 0,
+    const raw=weight?stages.reduce((sum,s)=>sum+s.weight*s.progress_percent,0)/weight:0;
+    return { progress: stages.length&&stages.every(s=>s.status==='COMPLETED')?100:Math.min(99,Math.round(raw)),
       overdue_stages: stages.filter(s => stageView(s).overdue).length };
   }
   function finance(projectId) {
-    const expenses = all('SELECT * FROM expenses WHERE project_id=?', projectId).map(expenseView);
+    const expenses = all('SELECT * FROM expenses WHERE project_id=? AND voided_at IS NULL', projectId).map(expenseView);
     return { expense_cents: expenses.reduce((sum,e)=>sum+e.amount_cents,0), paid_cents:expenses.reduce((sum,e)=>sum+e.paid_cents,0),
       overdue_cents:expenses.filter(e=>e.overdue).reduce((sum,e)=>sum+e.outstanding_cents,0),
       approved_additional_cents:get("SELECT COALESCE(SUM(amount_cents),0) total FROM approvals WHERE project_id=? AND status='APPROVED'",projectId).total };
@@ -119,6 +120,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
     m=path.match(/^\/api\/projects\/([^/]+)\/expenses\/([^/]+)\/payments\/([^/]+)\/void$/);
     if(m && req.method==='POST') {
       engineer(user); projectFor(user,m[1]);const expense=record('expenses',m[1],m[2]);
+      if(expense.voided_at)error('Esta despesa foi cancelada com a compra.');
       const payment=get('SELECT * FROM expense_payments WHERE id=? AND expense_id=?',m[3],expense.id);
       if(!payment)throw new v.HttpError(404,'Pagamento não encontrado.');
       const input=await body(req), reason=v.text(input.reason,'Motivo do estorno',1000);
@@ -129,6 +131,8 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
     if(!m)return false;
     const [,projectId,kind,id,action]=m;
     const project=projectFor(user,projectId), method=req.method;
+    const permitted={diary:['revisions'],materials:['movements'],expenses:['payments'],stages:[],approvals:['send','cancel','decision']};
+    if(action&&!permitted[kind].includes(action))throw new v.HttpError(404,'Operação não encontrada.');
     if(user.role!=='ENGINEER' && !(kind==='diary'&&method==='GET') && !(kind==='approvals'&&(method==='GET'||action==='decision'&&method==='POST')) && !(kind==='stages'&&method==='GET'))engineer(user);
     if(method==='GET'&&!id){const data=details(projectId,user);return finish(send,200,data[kind]||[]);}
     if(kind==='diary') {
@@ -195,15 +199,16 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
         if(row&&(amount!==balance(id)||(unit!==row.unit&&isUnit(row.unit))))error('Saldo e unidade são preservados. Registre entradas, consumo, perdas ou transferência.');
         const minimum=v.number(input.minimum_quantity??row?.minimum_quantity??0,'Estoque mínimo');if(minimum)quantity(minimum);
         const newId=id||randomUUID();
-        transaction(()=>{if(row){if(unit!==row.unit)audit(user,`material.unit.corrected:${row.unit}->${unit}`,id);run('UPDATE materials SET name=?,notes=?,unit=?,minimum_quantity=? WHERE id=?',name,notes,unit,minimum,id);}else{run('INSERT INTO materials(id,project_id,name,unit,quantity,notes,minimum_quantity) VALUES(?,?,?,?,?,?,?)',newId,projectId,name,unit,amount,notes,minimum);if(amount)run("INSERT INTO material_movements(id,material_id,type,quantity,delta,movement_date,notes,author_id) VALUES(?,?,'OPENING',?,?,?,?,?)",randomUUID(),newId,amount,amount,workToday(),'Saldo inicial',user.id);}audit(user,row?'materials.updated':'materials.created',newId);});
+        transaction(()=>{if(row){const current=get('SELECT unit FROM materials WHERE id=?',id);if(unit!==current.unit&&isUnit(current.unit))error('A unidade já foi corrigida. Atualize a obra antes de salvar.');}if(all('SELECT id,name,unit FROM materials WHERE project_id=?',projectId).some(m=>m.id!==id&&m.unit===unit&&m.name.trim().toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR')))error('Este material já está cadastrado nesta unidade. Use o cadastro existente.');if(row){if(unit!==row.unit)audit(user,`material.unit.corrected:${row.unit}->${unit}`,id);run('UPDATE materials SET name=?,notes=?,unit=?,minimum_quantity=? WHERE id=?',name,notes,unit,minimum,id);}else{run('INSERT INTO materials(id,project_id,name,unit,quantity,notes,minimum_quantity) VALUES(?,?,?,?,?,?,?)',newId,projectId,name,unit,amount,notes,minimum);if(amount)run("INSERT INTO material_movements(id,material_id,type,quantity,delta,movement_date,notes,author_id) VALUES(?,?,'OPENING',?,?,?,?,?)",randomUUID(),newId,amount,amount,workToday(),'Saldo inicial',user.id);}audit(user,row?'materials.updated':'materials.created',newId);});
         return finish(send,row?200:201,{id:newId});
       }
     }
     if(kind==='expenses') {
       engineer(user);const row=id?record('expenses',projectId,id):null;
+      if(row?.voided_at&&method!=='GET')error('Esta despesa foi cancelada com a compra. Consulte o histórico.');
       if(action==='payments'&&row&&method==='POST'){
         const input=await body(req),amount=v.cents(input.amount,'Valor pago',.01),date=v.date(input.payment_date,'Data do pagamento'),receipt=receiptFor(input.receipt_id,projectId),method=v.text(input.method,'Forma de pagamento',100,true),notes=v.text(input.notes,'Observações',2000,true),newId=requestId(input);
-        transaction(()=>{const existing=get('SELECT * FROM expense_payments WHERE id=?',newId);if(existing){if(existing.expense_id!==id||existing.amount_cents!==amount||existing.payment_date!==date||existing.receipt_id!==receipt||existing.method!==method||existing.notes!==notes||existing.voided_at)error('Identificador já utilizado em outro pagamento.');return;}if(paid(id)+amount>get('SELECT amount_cents FROM expenses WHERE id=?',id).amount_cents)error('O pagamento ultrapassa o saldo da despesa.');run('INSERT INTO expense_payments(id,expense_id,amount_cents,payment_date,method,notes,receipt_id,author_id) VALUES(?,?,?,?,?,?,?,?)',newId,id,amount,date,method,notes,receipt,user.id);syncExpense(id);audit(user,'payment.created',newId);});
+        transaction(()=>{const current=get('SELECT * FROM expenses WHERE id=?',id);if(current.voided_at)error('Esta despesa foi cancelada com a compra.');const existing=get('SELECT * FROM expense_payments WHERE id=?',newId);if(existing){if(existing.expense_id!==id||existing.amount_cents!==amount||existing.payment_date!==date||existing.receipt_id!==receipt||existing.method!==method||existing.notes!==notes||existing.voided_at)error('Identificador já utilizado em outro pagamento.');return;}if(paid(id)+amount>get('SELECT amount_cents FROM expenses WHERE id=?',id).amount_cents)error('O pagamento ultrapassa o saldo da despesa.');run('INSERT INTO expense_payments(id,expense_id,amount_cents,payment_date,method,notes,receipt_id,author_id) VALUES(?,?,?,?,?,?,?,?)',newId,id,amount,date,method,notes,receipt,user.id);syncExpense(id);audit(user,'payment.created',newId);});
         return finish(send,201,{id:newId});
       }
       if(method==='DELETE'&&row){if(get('SELECT id FROM purchases WHERE expense_id=?',id))error('Despesa vinculada a um recebimento de compra. Preserve o histórico.');if(get('SELECT id FROM expense_payments WHERE expense_id=?',id))error('Despesa com histórico de pagamentos não pode ser excluída.');transaction(()=>{run('DELETE FROM expenses WHERE id=?',id);audit(user,'expenses.deleted',id);});return finish(send,200,{ok:true});}
@@ -213,7 +218,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
         if(row&&get('SELECT id FROM purchases WHERE expense_id=?',id)&&amount!==row.amount_cents)error('O valor desta despesa veio do recebimento da compra e deve ser preservado.');
         if(row&&(amount<paid(id)||status!==row.status))error('Use os pagamentos para mudar a quitação. O valor não pode ser menor que o total pago.');
         const newId=id||randomUUID();
-        transaction(()=>{if(row){run('UPDATE expenses SET description=?,category=?,amount_cents=?,expense_date=?,supplier=?,due_date=? WHERE id=?',description,category,amount,date,supplier,due,id);syncExpense(id);}else{run('INSERT INTO expenses(id,project_id,description,category,amount_cents,expense_date,status,supplier,due_date) VALUES(?,?,?,?,?,?,?,?,?)',newId,projectId,description,category,amount,date,status,supplier,due);if(status==='PAID')run('INSERT INTO expense_payments(id,expense_id,amount_cents,payment_date,notes,author_id) VALUES(?,?,?,?,?,?)',randomUUID(),newId,amount,date,'Quitação no cadastro',user.id);}audit(user,row?'expenses.updated':'expenses.created',newId);});
+        transaction(()=>{if(row){if(get('SELECT voided_at FROM expenses WHERE id=?',id).voided_at)error('Esta despesa foi cancelada com a compra.');run('UPDATE expenses SET description=?,category=?,amount_cents=?,expense_date=?,supplier=?,due_date=? WHERE id=?',description,category,amount,date,supplier,due,id);syncExpense(id);}else{run('INSERT INTO expenses(id,project_id,description,category,amount_cents,expense_date,status,supplier,due_date) VALUES(?,?,?,?,?,?,?,?,?)',newId,projectId,description,category,amount,date,status,supplier,due);if(status==='PAID')run('INSERT INTO expense_payments(id,expense_id,amount_cents,payment_date,notes,author_id) VALUES(?,?,?,?,?,?)',randomUUID(),newId,amount,date,'Quitação no cadastro',user.id);}audit(user,row?'expenses.updated':'expenses.created',newId);});
         return finish(send,row?200:201,{id:newId});
       }
     }
@@ -242,5 +247,16 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
     }
     throw new v.HttpError(404,'Operação não encontrada.');
   }
-  return { handle, details, summary, finance };
+  function attention(project,user) {
+    if(user.role==='CLIENT')return {
+      decisions_pending:get("SELECT COUNT(*) n FROM approvals WHERE project_id=? AND client_id=? AND status='PENDING'",project.id,user.id).n,
+      selections_pending:get("SELECT COUNT(*) n FROM selections WHERE project_id=? AND client_id=? AND status='PENDING'",project.id,user.id).n
+    };
+    return {
+      questions_waiting:get("SELECT COUNT(*) n FROM questions q WHERE q.project_id=? AND q.client_id=? AND (SELECT u.role FROM question_messages m JOIN users u ON u.id=m.author_id WHERE m.question_id=q.id ORDER BY m.rowid DESC LIMIT 1)='CLIENT'",project.id,project.client_id).n,
+      low_stock_count:all('SELECT id,minimum_quantity FROM materials WHERE project_id=?',project.id).filter(m=>free(m.id)<m.minimum_quantity).length,
+      inspections_overdue:get("SELECT COUNT(*) n FROM inspections WHERE project_id=? AND due_date<? AND status IN ('OPEN','IN_PROGRESS')",project.id,workToday()).n
+    };
+  }
+  return { handle, details, summary, finance, attention };
 }

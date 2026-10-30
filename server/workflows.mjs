@@ -42,7 +42,7 @@ export function createWorkflows(ctx) {
     });return result;
   }
   async function handle({path,req,user,body,send}) {
-    const m=path.match(/^\/api\/projects\/([^/]+)\/(reservations|purchases|selections|inspections|movements)(?:\/([^/]+))?(?:\/(release|consume|quotes|order|receive|complete|cancel|options|send|choose|reject|update|close|reopen|reverse))?$/);
+    const m=path.match(/^\/api\/projects\/([^/]+)\/(reservations|purchases|selections|inspections|movements)(?:\/([^/]+))?(?:\/(release|consume|quotes|order|receive|complete|void|cancel|options|send|choose|reject|update|close|reopen|reverse))?$/);
     if(!m)return false;
     const [,projectId,kind,id,action]=m;
     projectFor(user,projectId);
@@ -83,6 +83,20 @@ export function createWorkflows(ctx) {
         run('UPDATE stock_reservations SET status=?,movement_id=? WHERE id=?',action==='consume'?'CONSUMED':'RELEASED',movementId,id);audit(user,`reservation.${action}`,id);return{ok:true};
       }
       if(kind==='purchases') {
+        if(action==='void'&&id){
+          const purchase=record('purchases',projectId,id);
+          if(purchase.status!=='RECEIVED'||!purchase.expense_id||!purchase.movement_id)fail('Somente compras registradas podem ser estornadas.');
+          const mat=material(projectId,purchase.material_id),reason=v.text(input.reason,'Motivo do estorno',1000);
+          if(free(mat.id)<purchase.quantity)fail('Parte desta compra já foi usada, transferida ou reservada. Reponha o saldo livre ou corrija essas movimentações antes do estorno.');
+          const expense=record('expenses',projectId,purchase.expense_id);
+          if(expense.voided_at)fail('Compra já estornada.');
+          const reversal=movement(user,mat,'CONSUMPTION',purchase.quantity,-purchase.quantity,workToday(),`Estorno de compra: ${reason}`,purchase.movement_id);
+          run('UPDATE expenses SET voided_at=CURRENT_TIMESTAMP,void_reason=? WHERE id=?',reason,expense.id);
+          run('UPDATE expense_payments SET voided_at=CURRENT_TIMESTAMP,void_reason=? WHERE expense_id=? AND voided_at IS NULL',`Estorno da compra: ${reason}`,expense.id);
+          run("UPDATE purchases SET status='CANCELLED',notes=notes||? WHERE id=?",`\nEstorno de compra: ${reason}`,id);
+          audit(user,'purchase.voided',id);return{id,reversal_id:reversal};
+        }
+
         if(action==='cancel'&&id){
           const row=record('purchases',projectId,id);
           if(!['QUOTING','ORDERED'].includes(row.status))fail('Compra já registrada ou cancelada.');

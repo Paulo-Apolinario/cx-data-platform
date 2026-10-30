@@ -216,6 +216,6 @@ test('migração v1 preserva saldos, pagamentos e medições sem duplicar em rei
     db.close();db=openDatabase(dir);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM material_movements').get().n,1);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM expense_payments').get().n,1);
-    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3,4,5]);
+    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3,4,5,6]);
   } finally {db.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -63,7 +63,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
       id: project.id, name: project.name, address: project.address, description: project.description,
       start_date: project.start_date, end_date: project.end_date, status: project.status,
       stage_count: counts.total, completed_stages: counts.completed,
-      ...operations.summary(project.id)
+      ...operations.summary(project.id), ...operations.attention(project,user)
     };
     if (user.role === 'ENGINEER') {
       const client = get('SELECT name,email FROM users WHERE id = ?', project.client_id);
@@ -207,6 +207,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
             return send(200, { id });
           }
           if (req.method === 'DELETE' && id) {
+            if(resource==='workers'&&(get("SELECT d.id FROM diary_entries d,json_each(d.workforce_json) w WHERE json_extract(w.value,'$.id')=?",id)||get("SELECT r.id FROM diary_revisions r,json_each(json_extract(r.snapshot_json,'$.workforce_json')) w WHERE json_extract(w.value,'$.id')=?",id)))throw new v.HttpError(409,'Profissional presente no histórico do diário. Edite o cadastro e desmarque Profissional ativo em vez de excluir.');
             transaction(() => { run(`DELETE FROM ${resource} WHERE id=? AND project_id=?`, id, projectId); audit(user, `${resource}.deleted`, id); });
             return send(200, { ok: true });
           }

@@ -267,3 +267,18 @@ pendentes permanecem sem efeito no estoque ou financeiro até confirmação expl
 Perguntas/Acabamentos/Vistoria ficam nas últimas posições das abas. Materiais
 prioriza saldo livre por cartão e compra/retirada; reservas, entradas sem custo e
 histórico são acessíveis sob demanda. A retirada não oferece o tipo Entrada.
+
+## Revisão funcional e estorno de compra (migração 6)
+
+`expenses.voided_at/void_reason` preservam a despesa original, excluindo-a dos
+indicadores financeiros atuais. POST `/api/projects/:project/purchases/:id/void`
+exige engenheiro, motivo e saldo livre suficiente para a quantidade integral.
+Na mesma transação cria movimento compensatório com reverses_id, cancela a compra,
+estorna pagamentos ativos e marca a despesa como cancelada. Idempotência segue
+operation_requests. Pagamentos e edição da despesa revalidam cancelamento dentro
+da transação, impedindo reativação por requisição iniciada antes do estorno.
+
+Indicadores de atenção são derivados dos registros existentes e incluídos na
+projeção da obra. Cliente recebe somente decisões pendentes destinadas à sua
+conta; estoque, contas e perguntas sem resposta do engenheiro são indicadores
+internos. Regras e casos reproduzíveis constam em REVISAO_CASOS_DE_USO.md.

@@ -1643,3 +1643,9 @@ progress { height: 5px; margin-bottom: 19px; }
   .purchase-table td:nth-child(1),.purchase-table td:nth-child(2),.purchase-table td:nth-child(5),.purchase-table td[colspan] {grid-column:1/-1;}
   .purchase-table td::before {content:attr(data-label);display:block;color:#62766e;font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;}
 }
+
+.attention-panel {margin:1.5rem 0 2rem;padding:1.25rem;background:#fff;border:1px solid #d9e3de;border-radius:12px;}
+.attention-list {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:.8rem;}
+.attention-item {text-align:left;display:grid;gap:.5rem;padding:1rem;background:#f3f6f2;border:1px solid #dbe5dc;border-radius:8px;color:#214e43;white-space:normal;}
+.attention-item span {font-size:.85rem;color:#62766e;}
+.attention-item:hover {background:#e9f0e8;}

@@ -220,5 +220,12 @@ export function openDatabase(dataDir) {
       INSERT INTO migrations(version) VALUES(5);
     COMMIT;`);
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version=6').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      ALTER TABLE expenses ADD COLUMN voided_at TEXT;
+      ALTER TABLE expenses ADD COLUMN void_reason TEXT NOT NULL DEFAULT '';
+      INSERT INTO migrations(version) VALUES(6);
+    COMMIT;`);
+  }
   return db;
 }
