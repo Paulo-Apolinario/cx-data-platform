@@ -18,14 +18,19 @@ de CX está arquivada em `legacy/cx-events/` e não faz parte do sistema atual.
 - Mapa fotográfico com data, ambiente, descrição e vínculo a uma etapa.
 - Documentos e notas em PDF/imagem; download protegido por autorização.
 - Publicação explícita de fotos/documentos para o cliente; internos por padrão.
-- Cadastro/edição/exclusão de materiais, despesas e profissionais por obra.
-- Visão financeira interna: registrado, pago, pendente e saldo do orçamento.
+- Diário de obra com equipe presente, fotos, ocorrências, notas internas e revisões.
+- Relatório do diário por período, pronto para imprimir ou salvar em PDF pelo navegador.
+- Materiais com saldo inicial, entradas, consumo, perdas e transferência entre obras.
+- Financeiro com fornecedor, vencimento, pagamentos parciais, comprovantes e estornos.
+- Cronograma com pesos, medição por etapa, responsáveis e datas previstas/reais.
+- Solicitações de alteração e custos adicionais, com aprovação ou recusa pelo cliente.
+- Cadastro de profissionais por obra e indicadores de orçamento, pago e valores em atraso.
 - Portal do cliente, sem acesso a outras obras ou aos cadastros internos.
 - Registro de auditoria das alterações no banco, ainda sem tela de consulta.
 
 O mapa fotográfico é um histórico de fotos por local/etapa, sem planta interativa
-ou georreferenciamento nesta versão. Materiais têm controle simples de quantidade,
-sem movimentação de estoque. Não há emissão fiscal, folha de pagamento ou envio de e-mails.
+ou georreferenciamento nesta versão. Não há emissão fiscal, folha de pagamento,
+assinatura digital ou envio de e-mails. Os aceites são registros de decisão no portal.
 
 ## Executar localmente, sem Docker
 
@@ -77,6 +82,47 @@ dispositivo por movimento reduzido é respeitada.
 Cada cliente pode acompanhar várias obras. A instalação admite uma conta de
 engenheiro. A aplicação web se adapta ao celular; não há aplicativo nativo/offline.
 
+## Como usar os novos módulos
+
+- **Diário de obra:** adicione data, serviços, ocorrências, equipe e fotos já cadastradas.
+  Marque a publicação para compartilhar. Anotações internas e nomes da equipe não
+  são enviados ao cliente; fotos internas continuam privadas. Edite mantendo o
+  histórico de revisões ou arquive para retirar o registro da visualização.
+  Use o período e **Imprimir / Salvar PDF**; no diálogo do navegador, escolha
+  **Salvar como PDF**. O relatório não inclui anotações internas.
+- **Materiais:** informe a unidade e o saldo inicial no cadastro. Depois use
+  **Movimentar** para entradas, consumo, perdas ou transferência. Para transferir,
+  cadastre o material na outra obra com a mesma unidade e selecione-o como destino.
+  Saída e entrada são registradas juntas. Saldos não ficam negativos e históricos
+  não são apagados. Correções de quantidade exigem um novo movimento com justificativa.
+- **Despesas:** registre fornecedor, categoria, valor e vencimento. Use **Pagar**
+  para registrar pagamentos parciais, escolhendo comprovantes da aba Documentos.
+  **Pagamentos** mostra o histórico e permite estornar com justificativa. Registros
+  com histórico de pagamentos não podem ser excluídos. O realizado soma despesas
+  registradas; o pago soma pagamentos não estornados, sem duplicar os valores.
+- **Cronograma:** configure peso, medição de 0 a 100%, responsável e datas de cada
+  etapa. O avanço é `soma(peso × medição) / soma(pesos)`, arredondado ao inteiro.
+  Planejada exige 0%; concluída exige 100%. Datas reais são opcionais; a conclusão
+  real exige início real e situação concluída. Prazos vencidos são destacados.
+- **Aprovações:** crie e revise o rascunho, depois envie ao portal do cliente
+  vinculado. Após o envio, título, descrição e valor ficam bloqueados. O cliente
+  aprova ou recusa com observação; conta e data ficam registradas. Uma decisão
+  não pode ser reescrita. O aceite não cria despesas nem altera o orçamento
+  automaticamente. Ao trocar o cliente da obra, propostas enviadas ao titular
+  anterior devem ser canceladas e recriadas para o novo destinatário.
+
+### Atualizar uma instalação existente
+
+1. Pare o servidor com **Ctrl+C** e copie toda a pasta `data` para um backup.
+2. Atualize a branch `feat/gestao-obras`, preservando `.env` e `data`.
+3. Execute `npm test` e depois `npm start`.
+4. A migração 2 é aplicada automaticamente uma única vez. Os saldos anteriores
+   viram movimentos de abertura; despesas já pagas recebem pagamentos históricos.
+   Etapas existentes recebem peso 1; concluídas ficam em 100%, demais em 0% até
+   medição informada. A medição ponderada pode mudar o percentual exibido.
+
+O cálculo de atraso usa a data em `America/Sao_Paulo`. Não há notificações por e-mail.
+
 ## Dados e backup
 
 O banco (`obras.sqlite`) e os arquivos (`uploads/`) ficam em `DATA_DIR`, por padrão
@@ -95,7 +141,8 @@ npm test
 ```
 
 Testes usam diretórios temporários e cobrem autenticação, isolamento entre clientes,
-visibilidade de anexos, cadastros, validação de valores/datas e persistência.
+visibilidade de anexos, cadastros, validação de valores/datas, migração com dados
+anteriores, transferências, pagamentos concorrentes, revisões e decisões do cliente.
 Não utilizam seu banco de trabalho.
 
 ## Produção e próximas etapas

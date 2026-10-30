@@ -1475,3 +1475,84 @@ progress { height: 5px; margin-bottom: 19px; }
   .document-list td:last-child { border-top: 1px solid var(--line); padding-bottom: 0; margin-top: 8px; }
   .document-list .attachment-actions { gap: 18px; }
 }
+
+/* Operational modules */
+.module-note { padding: 13px 17px; border: 1px solid #dfe8dc; border-radius: 8px; background: #f3f7ef; color: #697f70; font-size: .75rem; line-height: 1.7; margin-bottom: 22px; }
+.subsection-title { font-size: 1rem; margin: 32px 0 17px; }
+.diary-feed,.approval-feed { display: grid; gap: 20px; }
+.diary-card,.approval-card { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 25px; }
+.diary-card-heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 20px; }
+.diary-card-heading .eyebrow { margin-bottom: 9px; font-size: .6rem; }
+.diary-card h3,.approval-card h3 { font-size: 1.05rem; margin: 0; }
+.diary-section { margin: 17px 0; }
+.diary-section h4 { font-size: .72rem; color: #6b8271; margin-bottom: 7px; }
+.diary-section p,.approval-description,.preserve-lines { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .83rem; }
+.diary-meta { display: flex; flex-wrap: wrap; gap: 25px; border-top: 1px solid var(--line); padding-top: 14px; font-size: .71rem; color: var(--muted); }
+.crew-summary { color: var(--muted); font-size: .71rem; margin: 12px 0; }
+.internal-note { padding: 12px; margin: 15px 0; background: #f9f4e7; border: 1px dashed #d3c7a8; border-radius: 7px; font-size: .75rem; }
+.internal-note summary { cursor: pointer; color: #8c7348; }
+.internal-note p { white-space: pre-wrap; margin: 12px 0 0; }
+.diary-photos { display: grid; grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap: 10px; margin: 18px 0; }
+.diary-photos img { width: 100%; height: 130px; object-fit: cover; border-radius: 6px; display: block; }
+.period-filter { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; padding: 18px; border: 1px solid var(--line); background: white; border-radius: 9px; margin-bottom: 23px; }
+.period-filter label { flex: 0 1 180px; }
+.period-filter>span { font-size: .7rem; color: var(--muted); padding: 12px 0; margin-left: auto; }
+.selection-list { border: 1px solid var(--line); border-radius: 8px; padding: 15px; margin: 0; max-height: 210px; overflow: auto; }
+.selection-list legend { font-size: .78rem; color: var(--green); padding: 0 6px; font-weight: 650; }
+.selection-list .checkbox { font-size: .72rem; align-items: flex-start; line-height: 1.5; }
+.selection-list .checkbox input { flex-shrink: 0; }
+.selection-list p { font-size: .74rem; color: var(--muted); margin-bottom: 0; }
+.transfer-fields { padding: 15px; border: 1px solid #d8e4d4; border-radius: 8px; background: #f4f8f0; }
+.transfer-fields label+label { margin-top: 16px; }
+.transfer-fields small { display: block; color: var(--muted); font-size: .66rem; margin-top: 13px; }
+.history-item { border-bottom: 1px solid var(--line); padding: 17px 0; }
+.history-item:last-child { border-bottom: 0; }
+.history-item strong { display: block; font-size: .8rem; }
+.history-item p { font-size: .76rem; color: var(--muted); white-space: pre-wrap; margin: 9px 0; }
+.history-item .text-button { margin-right: 15px; }
+.outgoing,.overdue-label { color: #b15c3b; }
+.incoming { color: #347253; }
+.overdue-label { display: block; font-size: .65rem; margin-top: 8px; }
+.badge.partial { background: #fff1d9; color: #896331; }
+.badge.approved { background: #e5f1e5; color: #3f7549; }
+.badge.rejected,.badge.cancelled { background: #f6e9e5; color: #9a604e; }
+.approval-facts { display: flex; gap: 36px; flex-wrap: wrap; margin: 20px 0; }
+.approval-facts span { font-size: .68rem; color: var(--muted); }
+.approval-facts strong { display: block; font-size: .98rem; color: var(--green); margin-top: 7px; }
+.decision-record { border-left: 3px solid #9fb998; background: #f3f7ef; padding: 15px; margin: 20px 0; font-size: .76rem; }
+.decision-record p { white-space: pre-wrap; margin: 10px 0 0; }
+.finance-summary { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.tabs { position: relative; }
+#print-report { display: none; }
+@media(max-width:760px) {
+  .diary-card,.approval-card { padding: 19px; }
+  .period-filter { gap: 12px; }
+  .period-filter label { flex: 1 1 120px; }
+  .period-filter>span { margin-left: 0; }
+  .diary-card-heading { flex-wrap: wrap; }
+  .diary-photos { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .diary-photos img { height: 110px; }
+  .finance-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .approval-facts { gap: 22px; }
+}
+@media print {
+  @page { size: A4; margin: 16mm; }
+  body { background: white; color: #142c24; font-size: 10pt; }
+  body>*:not(#print-report) { display: none !important; }
+  #print-report { display: block; }
+  .report-header { border-bottom: 2px solid #284e3e; margin-bottom: 22px; padding-bottom: 15px; }
+  .report-header>span { font-size: 8pt; letter-spacing: .1em; }
+  .report-header h1 { font-size: 23pt; margin-top: 14px; }
+  .report-header p { font-size: 9pt; margin: 5px 0; }
+  #print-report .diary-card { margin: 0 0 20px; border: 1px solid #ccd8c6; padding: 18px; break-inside: avoid; }
+  #print-report .diary-section p { font-size: 10pt; line-height: 1.6; }
+  #print-report .diary-photos { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #print-report figure { margin: 0; break-inside: avoid; }
+  #print-report .diary-photos img { height: 150px; object-fit: contain; }
+  #print-report figcaption { font-size: 8pt; margin-top: 5px; }
+  .report-footer { font-size: 8pt; border-top: 1px solid #ccd8c6; padding-top: 12px; }
+}
+.section-heading>.heading-actions { flex-wrap: wrap; max-width: 100%; gap: 10px; }
+@media(max-width:760px) {
+  .section-heading>.heading-actions { width: 100%; justify-content: flex-start; }
+}

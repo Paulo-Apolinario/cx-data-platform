@@ -17,26 +17,42 @@ implementada: será necessária se houver expansão de usuários/instâncias.
 
 - `users`: engenheiro e contas de clientes, com hash scrypt individual e salt.
 - `projects`: obra, cliente titular, endereço, datas, orçamento em centavos e situação.
-- `stages`: etapas vinculadas à obra, datas e situação.
+- `stages`: etapa, peso, medição percentual, responsável, situação e datas previstas/reais.
 - `attachments`: fotos/documentos vinculados à obra e opcionalmente a uma etapa.
-- `materials`: quantidade registrada, unidade e observações por obra.
-- `expenses`: despesas, categoria, data, valor em centavos e pagamento.
+- `materials`: cadastro/unidade e cache do saldo por obra.
+- `material_movements`: razão imutável de abertura, entrada, consumo, perda e transferências.
+- `expenses`: despesa, fornecedor, categoria, vencimento e valor em centavos.
+- `expense_payments`: pagamentos parciais, comprovante e estorno com justificativa.
+- `diary_entries`: diário, equipe por snapshot, fotos, versão, visibilidade e arquivamento.
+- `diary_revisions`: snapshots das revisões anteriores, autor e data.
+- `approvals`: conteúdo da proposta, destinatário no envio, decisão e autor/data do aceite.
 - `workers`: profissional, função, telefone e situação por obra.
 - `sessions`: apenas o hash dos tokens, com validade de oito horas.
 - `audit_log`: autor, ação, identificador e data das alterações.
 - `migrations`: versão do schema aplicado automaticamente na inicialização.
 
-O percentual é **etapas concluídas / etapas cadastradas**. Não representa medição
-física ponderada; a interface informa essa regra. O total de despesas inclui
-pagas e pendentes, sem somar o orçamento. Materiais ainda não têm movimentações
-de entrada/consumo: a quantidade é editada diretamente. Não somar unidades diferentes.
+O progresso é a média ponderada das medições por etapa, sem vínculo automático
+com os volumes 3D ilustrativos. Em uma etapa de peso 1 com 100% e outra de peso 3
+com 50%, o avanço exibido é 63% (62,5% arredondado). A contagem de etapas concluídas
+continua disponível em separado.
+
+Materiais usam soma dos deltas arredondada a três casas; a coluna `quantity` é
+atualizada como cache. Transferências debitam e creditam em uma transação, com
+`transfer_id` compartilhado. Não somar materiais de unidades diferentes. A unidade
+não pode ser alterada após o cadastro; correções de saldo usam novos movimentos.
+
+Pagamentos efetivos são somados sem os estornados. Parcial é derivado do total pago,
+não um estado de quitação editável. O orçamento não é somado ao realizado. Adicionais
+aprovados são um indicador separado e não geram lançamentos automaticamente.
 
 ## Autorização
 
 O servidor verifica o perfil e o vínculo em cada acesso. Clientes têm leitura das
 próprias obras e etapas, além dos anexos com `visible_to_client=1`. Não recebem
 orçamento, despesas, materiais ou equipe nas respostas da API. Não podem cadastrar
-ou alterar registros. Arquivos não são públicos: a rota de download exige a mesma
+ou alterar os cadastros operacionais; podem decidir somente propostas pendentes
+endereçadas à sua conta. Diários publicados omitem notas internas e nomes da
+equipe, e filtram as fotos conforme publicação. Arquivos não são públicos: a rota de download exige a mesma
 autorização da obra e da publicação. Não se utiliza o nome original como caminho.
 
 O engenheiro cadastra os clientes com senha inicial de pelo menos 12 caracteres,
@@ -112,11 +128,46 @@ backup/restauração, supervisão do processo, HTTPS, limites no proxy, antivír
 recuperação de conta e capacidade para o volume de fotos esperado. Esta versão
 não foi validada em uma VPS nem com dados reais.
 
+## Módulos operacionais e consistência
+
+`server/operations.mjs` concentra as regras dos novos módulos; `public/operations-ui.js`
+fornece formulários, listas e relatório de impressão. A migração 2 preserva saldos,
+pagamentos antigos e etapas. `tests/fixtures/schema-v1.sql` representa o schema anterior
+para o teste de migração, não deve ser executado manualmente em banco atualizado.
+
+| Método/caminho relativo a `/api/projects/:id` | Regra |
+| --- | --- |
+| `GET, POST /diary` | Leitura autorizada; criação pelo engenheiro |
+| `GET, PATCH, DELETE /diary/:entry` | Leitura autorizada; edição com `version`; DELETE arquiva |
+| `GET /diary/:entry/revisions` | Somente engenheiro; revisões anteriores |
+| `GET /materials`, `/expenses`, `/stages`, `/approvals` | Conforme perfil e vínculo |
+| `POST /materials/:material/movements` | Entrada/consumo/perda/transferência; engenheiro |
+| `POST /expenses/:expense/payments` | Pagamento parcial; engenheiro |
+| `POST /expenses/:expense/payments/:payment/void` | Estorno com motivo; engenheiro |
+| `POST, PATCH /approvals[/:approval]` | Rascunhos do engenheiro |
+| `POST /approvals/:approval/send` | Publica para o cliente atual e fixa destinatário |
+| `POST /approvals/:approval/cancel` | Somente antes de uma decisão |
+| `POST /approvals/:approval/decision` | Cliente destinatário e titular atual; aprovação ou recusa |
+
+Os pagamentos e movimentos recebem `request_id` opcional, estável por submissão
+no frontend, para que uma repetição idêntica não duplique o lançamento. Reutilizar
+o identificador com conteúdo diferente retorna 409. Transferências e pagamentos
+validam o saldo dentro da transação. Estornos e decisões usam atualização condicional
+para impedir repetição. Edição de diário compara a versão atual dentro da transação.
+
+A proposta enviada torna-se imutável. A decisão registra autor e timestamp UTC,
+sem equivalência a uma assinatura digital. Trocar o titular não transfere propostas
+antigas ao novo cliente. Documentos de pagamentos e fotos referidas por diário ou
+revisão são protegidos contra exclusão, inclusive após estorno/arquivamento.
+
+O relatório do diário utiliza HTML de impressão e `window.print()`, com Save as PDF
+no navegador, sem serviço externo. Aguarda carregamento das imagens e omite notas
+internas. O cliente imprime somente dados autorizados. Não há exportação financeira,
+relatório de medição assinado ou emissão de documentos fiscais nesta entrega.
+
 ## Próximas entregas propostas
 
-1. Validar formulários e fluxo com o engenheiro, usando dados fictícios.
-2. Filtros do mapa fotográfico, relatório PDF e diário de obra.
-3. Histórico de entradas/consumo de materiais e anexos de comprovantes nas despesas.
-4. Medição física com pesos, responsáveis e dependências entre etapas.
-5. Convites, recuperação e desativação de contas, histórico de acesso e alterações.
-6. Plano de produção, backup automatizado e restauração testada; avaliar PostgreSQL.
+1. Validar as rotinas com o engenheiro usando dados fictícios.
+2. Categorias e revisões de documentos; dependências entre etapas e visualização Gantt.
+3. Convites, recuperação e desativação de contas, notificações e auditoria geral na interface.
+4. Plano de produção, backup automatizado e restauração testada; avaliar PostgreSQL.

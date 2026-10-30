@@ -1,6 +1,6 @@
 {
   "name": "gestao-obras",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Gestão de obras para um engenheiro e portal privado de clientes",

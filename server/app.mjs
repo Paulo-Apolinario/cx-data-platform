@@ -6,13 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { openDatabase } from './db.mjs';
 import { hashPassword, verifyPassword, sessionToken, tokenHash, publicUser, fileType } from './security.mjs';
 import * as v from './validation.mjs';
+import { createOperations } from './operations.mjs';
 
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), '../public');
 const MAX_FILE = 8 * 1024 * 1024;
 const MAX_BODY = 12 * 1024 * 1024;
 const SESSION_MS = 8 * 60 * 60 * 1000;
 const dummyHash = hashPassword('unused-dummy-password');
-const resources = new Set(['stages', 'materials', 'expenses', 'workers']);
+const resources = new Set(['workers']);
 
 async function body(req) {
   let size = 0;
@@ -55,19 +56,20 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
     if (!project || (user.role === 'CLIENT' && project.client_id !== user.id)) throw new v.HttpError(404, 'Obra não encontrada.');
     return project;
   }
+  const operations = createOperations({ db, get, all, run, audit, transaction, engineer, projectFor });
   function projectView(project, user) {
     const counts = get(`SELECT COUNT(*) total, COALESCE(SUM(status = 'COMPLETED'),0) completed FROM stages WHERE project_id = ?`, project.id);
     const result = {
       id: project.id, name: project.name, address: project.address, description: project.description,
       start_date: project.start_date, end_date: project.end_date, status: project.status,
       stage_count: counts.total, completed_stages: counts.completed,
-      progress: counts.total ? Math.round(counts.completed / counts.total * 100) : 0
+      ...operations.summary(project.id)
     };
     if (user.role === 'ENGINEER') {
       const client = get('SELECT name,email FROM users WHERE id = ?', project.client_id);
       Object.assign(result, { client_id: project.client_id, client_name: client?.name || null, client_email: client?.email || null,
         budget_cents: project.budget_cents,
-        ...get(`SELECT COALESCE(SUM(amount_cents),0) expense_cents, COALESCE(SUM(CASE WHEN status='PAID' THEN amount_cents ELSE 0 END),0) paid_cents FROM expenses WHERE project_id = ?`, project.id) });
+        ...operations.finance(project.id) });
     }
     return result;
   }
@@ -82,16 +84,9 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
       v.cents(input.budget ?? 0, 'Orçamento'), v.choice(input.status ?? 'ACTIVE', ['ACTIVE', 'PAUSED', 'COMPLETED'], 'Situação')];
   }
   function valuesFor(resource, input) {
-    if (resource === 'stages') {
-      const start = v.date(input.start_date, 'Início', true), end = v.date(input.end_date, 'Fim', true);
-      v.dates(start, end);
-      return [v.text(input.title, 'Etapa'), start, end, v.choice(input.status ?? 'PLANNED', ['PLANNED','IN_PROGRESS','COMPLETED'], 'Situação')];
-    }
-    if (resource === 'materials') return [v.text(input.name, 'Material'), v.text(input.unit, 'Unidade', 30), v.number(input.quantity, 'Quantidade'), v.text(input.notes, 'Observações', 2000, true)];
-    if (resource === 'expenses') return [v.text(input.description, 'Descrição'), v.text(input.category, 'Categoria', 100), v.cents(input.amount, 'Valor', 0.01), v.date(input.expense_date, 'Data'), v.choice(input.status ?? 'PENDING', ['PENDING','PAID'], 'Situação')];
     return [v.text(input.name, 'Nome'), v.text(input.job_title, 'Função', 100), v.text(input.phone, 'Telefone', 40, true), v.boolean(input.active ?? true)];
   }
-  const columns = { stages: ['title','start_date','end_date','status'], materials: ['name','unit','quantity','notes'], expenses: ['description','category','amount_cents','expense_date','status'], workers: ['name','job_title','phone','active'] };
+  const columns = { workers: ['name','job_title','phone','active'] };
   const cookie = (token, maxAge) => `obras_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${production ? '; Secure' : ''}`;
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -133,6 +128,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
       const user = get('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token_hash=? AND s.expires_at > ? AND u.active=1', tokenHash(token), Date.now());
       if (path.startsWith('/api/')) {
         if (!user) throw new v.HttpError(401, 'Entre na sua conta para continuar.');
+        if (await operations.handle({ path, req, user, body, send })) return;
         if (path === '/api/auth/me' && req.method === 'GET') return send(200, publicUser(user));
         if (path === '/api/auth/logout' && req.method === 'POST') {
           run('DELETE FROM sessions WHERE token_hash = ?', tokenHash(token));
@@ -173,7 +169,8 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
           if (req.method === 'GET') {
             const attachments = user.role === 'ENGINEER' ? all('SELECT * FROM attachments WHERE project_id=? ORDER BY record_date DESC, created_at DESC', project.id) : all('SELECT * FROM attachments WHERE project_id=? AND visible_to_client=1 ORDER BY record_date DESC, created_at DESC', project.id);
             const result = { project: projectView(project, user), stages: all('SELECT * FROM stages WHERE project_id=? ORDER BY COALESCE(start_date,\'9999\'),created_at,id', project.id), attachments };
-            if (user.role === 'ENGINEER') for (const table of ['materials','expenses','workers']) result[table] = all(`SELECT * FROM ${table} WHERE project_id=? ORDER BY created_at DESC,id`, project.id);
+            if (user.role === 'ENGINEER') result.workers = all('SELECT * FROM workers WHERE project_id=? ORDER BY name', project.id);
+            Object.assign(result, operations.details(project.id,user));
             return send(200, result);
           }
           if (req.method === 'PATCH') {
@@ -193,7 +190,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
           transaction(() => { run('UPDATE projects SET client_id=? WHERE id=?', clientId, project.id); audit(user, 'project.client.updated', project.id); });
           return send(200, projectView(projectFor(user, project.id), user));
         }
-        match = path.match(/^\/api\/projects\/([^/]+)\/(stages|materials|expenses|workers)(?:\/([^/]+))?$/);
+        match = path.match(/^\/api\/projects\/([^/]+)\/(workers)(?:\/([^/]+))?$/);
         if (match) {
           engineer(user); const [, projectId, resource, id] = match;
           projectFor(user, projectId);
@@ -254,6 +251,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
           }
           if (!match[2] && req.method === 'DELETE') {
             engineer(user);
+            if (get('SELECT id FROM expense_payments WHERE receipt_id=?', attachment.id) || get('SELECT d.id FROM diary_entries d, json_each(d.attachment_ids_json) j WHERE j.value=?', attachment.id) || get("SELECT r.id FROM diary_revisions r, json_each(json_extract(r.snapshot_json,'$.attachment_ids_json')) j WHERE j.value=?", attachment.id)) throw new v.HttpError(409, 'Arquivo vinculado a diário ou pagamento. Preserve o histórico.');
             transaction(() => { run('DELETE FROM attachments WHERE id=?', attachment.id); audit(user, 'attachment.deleted', attachment.id); });
             try { unlinkSync(resolve(uploads, attachment.id)); } catch (error) { console.error('Limpeza de arquivo:', error.code); }
             return send(200, { ok: true });
@@ -261,7 +259,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
         }
         throw new v.HttpError(404, 'Recurso não encontrado.');
       }
-      const staticFiles = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
+      const staticFiles = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/operations-ui.js': ['operations-ui.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
       if (req.method !== 'GET' || !staticFiles[path]) throw new v.HttpError(404, 'Página não encontrada.');
       const [file, type] = staticFiles[path];
       res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` }); res.end(readFileSync(resolve(PUBLIC, file)));

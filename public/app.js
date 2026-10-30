@@ -1,4 +1,5 @@
 import { icon, buildingScene } from './visuals.js';
+import { createOperationsUI } from './operations-ui.js';
 
 const $ = selector => document.querySelector(selector);
 const state = { user: null, projects: [], clients: [], page: 'overview', projectId: null, detail: null, tab: 'stages', search: '', attachmentSearch: '', attachmentStage: '', attachmentVisibility: 'all' };
@@ -12,6 +13,8 @@ const badge = status => `<span class="badge ${esc(status.toLowerCase())}">${esc(
 const empty = (title, description) => `<div class="empty"><span class="empty-icon">${icon('plus')}</span><h3>${title}</h3><p>${description}</p></div>`;
 const button = (action, title, extra = '', cls = 'primary') => `<button class="${cls}" data-action="${action}" ${extra}>${title.replace(/^＋\s*/, icon('plus'))}</button>`;
 
+const operationsUI = createOperationsUI({ state, api, esc, money, day, today, isEngineer, button, field, modal, refresh, notice, badge, render });
+
 async function api(path, options = {}) {
   const response = await fetch(`/api${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers }, ...(options.body ? { body: JSON.stringify(options.body) } : {}) });
   const result = await response.json();
@@ -24,14 +27,16 @@ function notice(message, error = false) {
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('#notice').hidden = true; }, 6500);
 }
 function handleError(error) {
-  if (error.status === 401) { state.user = null; $('#modal').close(); render(); }
+  if (error.status === 401) { projectRequest++;state.user=null;state.detail=null;state.projects=[];state.clients=[];$('#modal').close();$('#modal').replaceChildren();$('#print-report')?.remove();render(); }
   notice(error.message, true);
 }
 async function refresh() {
+  const userId=state.user?.id,projectId=state.projectId;
   const [projects, clients] = await Promise.all([api('/projects'), isEngineer() ? api('/clients') : Promise.resolve([])]);
   let detail = null;
   if (state.projectId) detail = await api(`/projects/${state.projectId}`);
   if (detail && state.attachmentStage && !detail.stages.some(s => s.id === state.attachmentStage)) state.attachmentStage = '';
+  if(state.user?.id!==userId||state.projectId!==projectId)return;
   Object.assign(state, { projects, clients, detail }); render();
 }
 function render() {
@@ -42,6 +47,8 @@ function render() {
   }
   const nav = [['overview','overview','Visão geral'],['projects','projects','Minhas obras'], ...(isEngineer() ? [['clients','users','Clientes']] : [])];
   $('#app').innerHTML = `<div class="shell"><aside class="sidebar"><a class="brand" href="#"><span class="brand-icon">${icon('building')}</span><span>Gestão<br><b>de Obras</b></span></a><div class="workspace">${isEngineer() ? 'ESPAÇO DO ENGENHEIRO' : 'PORTAL DO CLIENTE'}</div><nav aria-label="Principal">${nav.map(([page,symbol,label]) => `<button data-action="navigate" data-page="${page}" class="nav-link ${state.page === page ? 'selected' : ''}">${icon(symbol)}${label}</button>`).join('')}</nav><div class="sidebar-note"><span class="eyebrow">CADA DETALHE CONTA</span><p>${isEngineer() ? 'Uma visão organizada para conduzir suas obras.' : 'Mais perto de cada etapa da sua obra.'}</p></div><div class="account"><span class="avatar">${esc(state.user.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${isEngineer() ? 'Engenheiro' : 'Cliente'}</small></div></div><div class="account-actions">${button('password','Trocar senha','','text-button')}${button('logout','Sair','','text-button')}</div></aside><main class="main"><header class="topbar"><span>Gestão de Obras <span class="muted">/ ${state.detail ? esc(state.detail.project.name) : state.page === 'clients' ? 'Clientes' : state.page === 'projects' ? 'Minhas obras' : 'Visão geral'}</span></span><span class="today">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span></header><div class="content">${state.detail ? projectDetail() : state.page === 'clients' ? clientsPage() : projectsPage()}</div><footer>Gestão de Obras <span>Planejamento, execução e transparência.</span></footer></main></div>`;
+  const tabs=$('.tabs'),active=tabs?.querySelector('[aria-selected=true]');
+  if(active)tabs.scrollLeft=Math.max(0,active.offsetLeft-tabs.clientWidth/2+active.offsetWidth/2);
 }
 function projectsPage() {
   const total = state.projects.length;
@@ -81,7 +88,7 @@ function projectCards() {
     <article class="project-card">
       <div class="project-cover">${buildingScene({ compact: true })}<div class="cover-status">${badge(p.status)}</div><span class="cover-caption">VOLUME ILUSTRATIVO</span></div>
       <div class="project-card-body"><h3>${esc(p.name)}</h3><p class="address">${icon('pin')}${esc(p.address || 'Endereço ainda não informado')}</p>
-        <div class="progress-caption"><span>Etapas concluídas</span><strong>${p.progress}%</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
+        <div class="progress-caption"><span>Avanço ponderado</span><strong>${p.progress}%</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
         ${isEngineer() ? `<div class="card-client ${p.client_id ? '' : 'unassigned'}"><span class="client-avatar">${icon('users')}</span><div><small>CLIENTE DA OBRA</small><strong>${esc(p.client_name || 'Vincule o cliente desta obra')}</strong></div><button class="icon-button" data-action="assign-client" data-id="${p.id}" aria-label="${esc(p.client_id ? `Alterar cliente de ${p.name}` : `Vincular cliente a ${p.name}`)}">${icon(p.client_id ? 'link' : 'plus')}</button></div>` : ''}
         <div class="card-facts"><div><small>PREVISÃO DE ENTREGA</small><span>${day(p.end_date)}</span></div><div><small>ETAPAS</small><span>${p.completed_stages} de ${p.stage_count}</span></div></div>
         <a class="card-open" href="#obra=${p.id}" data-action="open-project" data-id="${p.id}" aria-label="Acompanhar obra: ${esc(p.name)}">Acompanhar obra ${icon('arrow')}</a>
@@ -94,22 +101,24 @@ function clientsPage() {
 }
 function projectDetail() {
   const { project: p } = state.detail;
-  const tabs = [['stages','Quadro de obra'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['expenses','Despesas'],['workers','Equipe']] : [])];
+  const tabs = [['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['expenses','Despesas'],['workers','Equipe']] : [])];
   return `
     <button class="back text-button" data-action="back">← Todas as obras</button>
     <section class="project-heading-panel"><div class="project-heading-copy"><span class="eyebrow">ACOMPANHAMENTO DA OBRA</span><h1 data-project-heading tabindex="-1">${esc(p.name)}</h1><p class="detail-address">${icon('pin')}${esc(p.address || 'Endereço não informado')}</p><div class="heading-actions">${badge(p.status)}${isEngineer() ? button('edit-project','Editar obra','','secondary') : ''}</div>${p.description ? `<p class="project-description">${esc(p.description)}</p>` : ''}</div>${buildingScene({ controls: true })}</section>
     ${isEngineer() ? `<section class="client-association ${p.client_id ? '' : 'unassigned'}" aria-labelledby="client-association-title"><span class="client-avatar">${icon('users')}</span><div class="client-association-copy"><span class="eyebrow" id="client-association-title">CLIENTE DA OBRA</span><h2>${esc(p.client_name || 'Esta obra ainda não tem cliente vinculado')}</h2><p>${p.client_id ? esc(p.client_email) : 'Vincule um cadastro existente ou crie o cliente aqui mesmo.'}</p><small>${p.client_id ? 'Acesso às etapas e aos arquivos publicados desta obra.' : 'O vínculo libera o acompanhamento no portal do cliente.'}</small></div>${button('assign-client', `${icon('link')} ${p.client_id ? 'Alterar cliente' : 'Vincular cliente'}`, `data-id="${p.id}"`, p.client_id ? 'secondary' : 'primary')}</section>` : ''}
     <div class="project-summary"><div><small>INÍCIO</small><strong>${day(p.start_date)}</strong></div><div><small>PREVISÃO DE ENTREGA</small><strong>${day(p.end_date)}</strong></div><div><small>ETAPAS CONCLUÍDAS</small><strong>${p.completed_stages} de ${p.stage_count} <span class="accent">${p.progress}%</span></strong></div>${isEngineer() ? `<div><small>ORÇAMENTO PREVISTO</small><strong>${money(p.budget_cents)}</strong></div>` : ''}</div>
-    <p class="progress-note">O percentual considera a quantidade de etapas concluídas, com o mesmo peso para cada etapa.</p>
+    <p class="progress-note">O avanço é a média das medições informadas, ponderada pelo peso de cada etapa.</p>
     <div class="tabs" role="tablist" aria-label="Informações da obra">${tabs.map(([tab,label]) => `<button id="tab-${tab}" role="tab" aria-selected="${state.tab === tab}" aria-controls="detail-panel" tabindex="${state.tab === tab ? 0 : -1}" class="${state.tab === tab ? 'active' : ''}" data-action="tab" data-tab="${tab}">${label}</button>`).join('')}</div>
     <section id="detail-panel" class="tab-content" role="tabpanel" aria-labelledby="tab-${state.tab}">${tabContent()}</section>`;
 }
 
 function tabContent() {
+  const operationPanel = operationsUI.panel(state.tab);
+  if (operationPanel !== null) return operationPanel;
   if (state.tab === 'stages') {
     return `<div class="section-heading"><div><h2>Quadro de obra</h2><p>Do planejamento à conclusão de cada etapa.</p></div>${isEngineer() ? button('new-stage','＋ Nova etapa') : ''}</div><div class="board">${['PLANNED','IN_PROGRESS','COMPLETED'].map(status => {
       const stages = state.detail.stages.filter(s => s.status === status);
-      return `<div class="board-column"><h3><span class="status-dot ${status.toLowerCase()}"></span>${labels[status]} <small>${stages.length}</small></h3>${stages.length ? stages.map(s => `<article class="stage-card"><h4>${esc(s.title)}</h4><p>${day(s.start_date)} → ${day(s.end_date)}</p><small>${state.detail.attachments.filter(a => a.stage_id === s.id).length} anexo(s)</small>${isEngineer() ? `<div class="row-actions">${button('edit-stage','Editar',`data-id="${s.id}"`,'text-button')}${button('delete-resource','Excluir',`data-resource="stages" data-id="${s.id}"`,'text-button danger')}</div>` : ''}</article>`).join('') : '<p class="column-empty">Nenhuma etapa nesta situação.</p>'}</div>`;
+      return `<div class="board-column"><h3><span class="status-dot ${status.toLowerCase()}"></span>${labels[status]} <small>${stages.length}</small></h3>${stages.length ? stages.map(s => `<article class="stage-card"><h4>${esc(s.title)}</h4><p>${day(s.start_date)} → ${day(s.end_date)}</p><p>${esc(s.responsible || 'Sem responsável')} · ${s.progress_percent}% · peso ${s.weight}</p>${s.overdue ? '<small class="overdue-label">Prazo vencido</small>' : ''}<small>${state.detail.attachments.filter(a => a.stage_id === s.id).length} anexo(s)</small>${isEngineer() ? `<div class="row-actions">${button('edit-stage','Editar',`data-id="${s.id}"`,'text-button')}${button('delete-resource','Excluir',`data-resource="stages" data-id="${s.id}"`,'text-button danger')}</div>` : ''}</article>`).join('') : '<p class="column-empty">Nenhuma etapa nesta situação.</p>'}</div>`;
     }).join('')}</div>`;
   }
   if (['photos','documents'].includes(state.tab)) return attachmentsPanel();
@@ -170,7 +179,7 @@ async function openProject(id, changeHistory = true) {
   const request = ++projectRequest;
   const detail = await api(`/projects/${id}`);
   if (request !== projectRequest) return;
-  Object.assign(state,{projectId:id,detail,page:'projects',tab:'stages',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all'});
+  Object.assign(state,{projectId:id,detail,page:'projects',tab:'stages',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all',diaryFrom:'',diaryTo:''});
   if (changeHistory) history.pushState(null,'',`#obra=${id}`);
   render(); window.scrollTo(0,0); $('[data-project-heading]').focus({preventScroll:true});
 }
@@ -181,9 +190,9 @@ function resourceTable(resource,title,description,add,headers,cells) {
 
 function field(name, label, value = '', type = 'text', options = {}) {
   if (type === 'select') return `<label>${label}<select name="${name}" aria-label="${esc(label)}">${options.choices.map(([id,title])=>`<option value="${esc(id)}" ${String(value) === String(id) ? 'selected' : ''}>${esc(title)}</option>`).join('')}</select></label>`;
-  if (type === 'textarea') return `<label class="full">${label}<textarea name="${name}" rows="3" maxlength="${options.max || 4000}">${esc(value)}</textarea></label>`;
+  if (type === 'textarea') return `<label class="full">${label}<textarea name="${name}" aria-label="${esc(label)}" rows="3" maxlength="${options.max || 4000}">${esc(value)}</textarea></label>`;
   if (type === 'checkbox') return `<label class="checkbox full"><input type="checkbox" name="${name}" ${value ? 'checked' : ''}>${label}</label>`;
-  return `<label ${options.full ? 'class="full"' : ''}>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${options.optional ? '' : 'required'} ${type === 'number' ? 'min="0" max="1000000000" step="0.01"' : ''} ${type === 'password' ? 'minlength="12" maxlength="128" autocomplete="new-password"' : ''} ${['text','email'].includes(type) ? `maxlength="${options.max || 200}"` : ''}></label>`;
+  return `<label ${options.full ? 'class="full"' : ''}>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${options.optional ? '' : 'required'} ${options.readonly ? 'readonly' : ''} ${type === 'number' ? `min="${options.min??0}" max="${options.max??1000000000}" step="${options.step??0.01}"` : ''} ${type === 'password' ? 'minlength="12" maxlength="128" autocomplete="new-password"' : ''} ${['text','email'].includes(type) ? `maxlength="${options.max || 200}"` : ''}></label>`;
 }
 function modal(title, content, submit, help = '', onSave = null) {
   const dialog = $('#modal');
@@ -265,20 +274,27 @@ function projectForm(edit = false) {
 
 function stageForm(id) {
   const s = state.detail.stages.find(s=>s.id===id) || {};
-  modal(id ? 'Editar etapa' : 'Nova etapa', field('title','Nome da etapa',s.title) + selectStatus(s.status || 'PLANNED',['PLANNED','IN_PROGRESS','COMPLETED']) + field('start_date','Início previsto',s.start_date,'date',{optional:true}) + field('end_date','Conclusão prevista',s.end_date,'date',{optional:true}), 'Salvar etapa', 'As etapas aparecem no quadro do cliente. Vincule imagens e documentos a elas ao adicionar um anexo.', async data => {
-    await api(`/projects/${state.projectId}/stages${id?`/${id}`:''}`,{method:id?'PATCH':'POST',body:Object.fromEntries(data)}); await refresh();
+  const fields = field('title','Nome da etapa',s.title) + selectStatus(s.status || 'PLANNED',['PLANNED','IN_PROGRESS','COMPLETED'])
+    + field('weight','Peso da etapa',s.weight ?? 1,'number',{min:.001,max:1000,step:.001}) + field('progress_percent','Medição realizada (%)',s.progress_percent ?? 0,'number',{max:100})
+    + field('responsible','Responsável',s.responsible,'text',{optional:true})
+    + field('start_date','Início previsto',s.start_date,'date',{optional:true}) + field('end_date','Conclusão prevista',s.end_date,'date',{optional:true})
+    + field('actual_start','Início real',s.actual_start,'date',{optional:true}) + field('actual_end','Conclusão real',s.actual_end,'date',{optional:true});
+  modal(id ? 'Editar etapa' : 'Nova etapa', fields, 'Salvar etapa', 'Use 0% para planejada e 100% para concluída. O peso define a participação da etapa no avanço da obra.', async data => {
+    const input=Object.fromEntries(data); input.weight=Number(input.weight);input.progress_percent=Number(input.progress_percent);
+    await api(`/projects/${state.projectId}/stages${id?`/${id}`:''}`,{method:id?'PATCH':'POST',body:input}); await refresh();
   });
+  $('#modal-form [name=status]').addEventListener('change',event=>{const progress=$('#modal-form [name=progress_percent]');if(event.target.value==='COMPLETED')progress.value=100;else if(event.target.value==='PLANNED'||Number(progress.value)===100)progress.value=0;});
 }
 function resourceForm(resource, id) {
   const item = state.detail[resource].find(i=>i.id===id) || {};
   let fields;
-  if (resource === 'materials') fields = field('name','Material',item.name) + field('unit','Unidade (kg, m², un…)',item.unit) + field('quantity','Quantidade registrada',item.quantity ?? 0,'number') + field('notes','Observações',item.notes,'textarea',{max:2000});
+  if (resource === 'materials') fields = field('name','Material',item.name) + field('unit','Unidade (kg, m², un…)',item.unit,'text',{readonly:!!id}) + (id ? `<p class="full module-note">Saldo atual: ${item.quantity.toLocaleString('pt-BR')} ${esc(item.unit)}. Use Movimentar para alterar o saldo.</p>` : field('quantity','Saldo inicial',0,'number',{step:.001})) + field('notes','Observações',item.notes,'textarea',{max:2000});
   if (resource === 'workers') fields = field('name','Nome',item.name) + field('job_title','Função',item.job_title,'text',{max:100}) + field('phone','Telefone',item.phone,'text',{optional:true,max:40}) + field('active','Profissional ativo nesta obra',item.active ?? true,'checkbox');
-  if (resource === 'expenses') fields = field('description','Descrição',item.description) + field('category','Categoria',item.category,'text',{max:100}) + field('amount','Valor (R$)',(item.amount_cents||0)/100,'number') + field('expense_date','Data da despesa',item.expense_date || today(),'date') + selectStatus(item.status||'PENDING',['PENDING','PAID']);
+  if (resource === 'expenses') fields = field('description','Descrição',item.description) + field('category','Categoria',item.category,'text',{max:100}) + field('amount','Valor (R$)',(item.amount_cents||0)/100,'number') + field('expense_date','Data da despesa',item.expense_date || today(),'date') + field('supplier','Fornecedor',item.supplier,'text',{optional:true}) + field('due_date','Vencimento',item.due_date,'date',{optional:true}) + (id ? '<p class="full module-note">A quitação é controlada pelo histórico de pagamentos.</p>' : selectStatus('PENDING',['PENDING','PAID']));
   modal(`${id ? 'Editar' : 'Adicionar'} ${resource==='materials'?'material':resource==='workers'?'profissional':'despesa'}`, fields, 'Salvar registro', 'Registro interno, disponível apenas para o engenheiro.', async data => {
     const input = Object.fromEntries(data);
-    if (resource==='materials') input.quantity = Number(input.quantity);
-    if (resource==='expenses') input.amount = Number(input.amount);
+    if (resource==='materials') input.quantity = id ? item.quantity : Number(input.quantity);
+    if (resource==='expenses') { input.amount = Number(input.amount); if(id) input.status=item.status; }
     if (resource==='workers') input.active = data.has('active');
     await api(`/projects/${state.projectId}/${resource}${id?`/${id}`:''}`,{method:id?'PATCH':'POST',body:input}); await refresh();
   });
@@ -301,9 +317,10 @@ document.addEventListener('click', async event => {
   const target = event.target.closest('[data-action]'); if (!target) return;
   const { action, id, resource } = target.dataset;
   try {
+    if (operationsUI.handles(action)) { event.preventDefault(); await operationsUI.action(action,target); return; }
     if (action==='close-modal') return $('#modal').close();
     if (action==='navigate' || action==='back') { projectRequest++; state.page=target.dataset.page || 'projects'; state.projectId=null; state.detail=null; history.pushState(null,'',`#${state.page}`); render(); window.scrollTo(0,0); return; }
-    if (action==='logout') { await api('/auth/logout',{method:'POST',body:{}}); state.user=null; state.projects=[]; state.detail=null; state.projectId=null; history.replaceState(null,'','#overview'); render(); return; }
+    if (action==='logout') { projectRequest++;await api('/auth/logout',{method:'POST',body:{}});state.clients=[];$('#modal').close();$('#modal').replaceChildren();$('#print-report')?.remove(); state.user=null; state.projects=[]; state.detail=null; state.projectId=null; history.replaceState(null,'','#overview'); render(); return; }
     if (action==='open-project') { if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); await openProject(id); return; }
     if (action==='preview-attachment') return previewAttachment(id);
     if (action==='tab') { state.tab=target.dataset.tab;state.attachmentSearch='';state.attachmentStage='';state.attachmentVisibility='all'; render(); return; }

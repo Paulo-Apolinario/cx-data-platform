@@ -73,5 +73,62 @@ export function openDatabase(dataDir) {
       INSERT INTO migrations(version) VALUES (1);
     COMMIT;`);
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version = 2').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      ALTER TABLE stages ADD COLUMN weight REAL NOT NULL DEFAULT 1 CHECK(weight > 0 AND weight <= 1000);
+      ALTER TABLE stages ADD COLUMN progress_percent REAL NOT NULL DEFAULT 0 CHECK(progress_percent BETWEEN 0 AND 100);
+      ALTER TABLE stages ADD COLUMN responsible TEXT NOT NULL DEFAULT '';
+      ALTER TABLE stages ADD COLUMN actual_start TEXT;
+      ALTER TABLE stages ADD COLUMN actual_end TEXT;
+      UPDATE stages SET progress_percent=100 WHERE status='COMPLETED';
+      ALTER TABLE expenses ADD COLUMN supplier TEXT NOT NULL DEFAULT '';
+      ALTER TABLE expenses ADD COLUMN due_date TEXT;
+      CREATE TABLE material_movements (
+        id TEXT PRIMARY KEY, material_id TEXT NOT NULL REFERENCES materials(id),
+        type TEXT NOT NULL CHECK(type IN ('OPENING','ENTRY','CONSUMPTION','LOSS','TRANSFER_OUT','TRANSFER_IN')),
+        quantity REAL NOT NULL CHECK(quantity > 0), delta REAL NOT NULL,
+        movement_date TEXT NOT NULL, supplier TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+        transfer_id TEXT, author_id TEXT REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO material_movements(id,material_id,type,quantity,delta,movement_date,notes)
+        SELECT 'opening-'||id,id,'OPENING',quantity,quantity,date(created_at),'Saldo anterior preservado na migração'
+        FROM materials WHERE quantity > 0;
+      CREATE INDEX movements_material ON material_movements(material_id);
+      CREATE TABLE expense_payments (
+        id TEXT PRIMARY KEY, expense_id TEXT NOT NULL REFERENCES expenses(id),
+        amount_cents INTEGER NOT NULL CHECK(amount_cents > 0), payment_date TEXT NOT NULL,
+        method TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+        receipt_id TEXT REFERENCES attachments(id), author_id TEXT REFERENCES users(id),
+        voided_at TEXT, void_reason TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO expense_payments(id,expense_id,amount_cents,payment_date,notes)
+        SELECT 'legacy-'||id,id,amount_cents,expense_date,'Pagamento anterior preservado na migração' FROM expenses WHERE status='PAID';
+      CREATE INDEX payments_expense ON expense_payments(expense_id);
+      CREATE TABLE diary_entries (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), work_date TEXT NOT NULL,
+        weather TEXT NOT NULL DEFAULT '', services TEXT NOT NULL, occurrences TEXT NOT NULL DEFAULT '',
+        internal_notes TEXT NOT NULL DEFAULT '', workforce_json TEXT NOT NULL DEFAULT '[]',
+        attachment_ids_json TEXT NOT NULL DEFAULT '[]', visible_to_client INTEGER NOT NULL DEFAULT 0,
+        version INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0,
+        author_id TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE diary_revisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, diary_id TEXT NOT NULL REFERENCES diary_entries(id),
+        version INTEGER NOT NULL, snapshot_json TEXT NOT NULL, author_id TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(diary_id,version)
+      );
+      CREATE INDEX diary_project ON diary_entries(project_id,work_date);
+      CREATE TABLE approvals (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), client_id TEXT REFERENCES users(id),
+        title TEXT NOT NULL, description TEXT NOT NULL, amount_cents INTEGER NOT NULL DEFAULT 0 CHECK(amount_cents >= 0),
+        deadline TEXT, status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','PENDING','APPROVED','REJECTED','CANCELLED')),
+        decision_note TEXT NOT NULL DEFAULT '', decided_by TEXT REFERENCES users(id), decided_at TEXT,
+        sent_at TEXT, created_by TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX approvals_project ON approvals(project_id,status);
+      INSERT INTO migrations(version) VALUES(2);
+    COMMIT;`);
+  }
   return db;
 }

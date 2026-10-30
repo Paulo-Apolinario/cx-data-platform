@@ -1,25 +1,22 @@
-# Próximas funcionalidades propostas
+# Evolução da plataforma
 
-Recomendações para a rotina de um engenheiro com várias obras. Os módulos abaixo
-não estão implementados nesta entrega; a ordem busca valor operacional e rastreabilidade.
+## Implementado nesta entrega
 
-| Ordem | Módulo | Entrega inicial sugerida |
-| --- | --- | --- |
-| 1 | Diário de obra | Registro por data de serviços, equipe presente, ocorrências e fotos, com publicação de resumo para o cliente e relatório PDF. |
-| 2 | Movimentação de materiais | Entradas, consumo, perdas e transferências, unidade, fornecedor e histórico; saldo calculado a partir dos movimentos. |
-| 3 | Financeiro por obra | Vencimentos, fornecedor, pagamentos parciais, comprovantes, categorias e comparação entre orçamento e realizado. |
-| 4 | Cronograma e medição | Planejado versus realizado, datas efetivas, responsáveis, alertas de atraso e pesos por etapa. |
-| 5 | Solicitações e aprovações | Dúvidas, pedidos de mudança, orçamento adicional e aceite do cliente com autor, data e histórico. |
-| 6 | Documentos versionados | Categorias, revisões, validade, versão vigente e histórico, sem substituir silenciosamente o documento anterior. |
+| Módulo | Entrega |
+| --- | --- |
+| Diário de obra | Data, serviços, ocorrências, equipe presente por snapshot, fotos, notas internas, publicação, revisões, arquivamento e relatório para imprimir/salvar PDF. |
+| Materiais | Saldos iniciais, entradas, consumo, perdas e transferência atômica entre obras, histórico e fornecedor. |
+| Financeiro | Fornecedor, vencimento, pagamento parcial, comprovante, estorno justificado, indicadores e orçamento versus realizado. |
+| Cronograma | Peso/medição por etapa, responsável, datas previstas/reais e alertas de prazo vencido. |
+| Aprovações | Rascunho, envio ao portal, bloqueio do conteúdo enviado, aceite/recusa do cliente, autor/data e histórico preservado. |
 
-Começar pelo diário permite consolidar uma linha do tempo da execução e a
-comunicação com o cliente. Depois, estoque e financeiro podem vincular movimentos
-e despesas aos registros da obra. O progresso atual continua calculado pela
-quantidade de etapas concluídas, sem medição física ponderada.
+## Evoluções ainda propostas
 
-## Preparação para uso real
+- Revisões e categorias de documentos, versão vigente e validade.
+- Dependências entre etapas, Gantt e comparativos de produtividade.
+- Catálogo compartilhado de materiais, estoque mínimo e requisições de compra.
+- Convites e recuperação de conta, notificações e consulta da auditoria geral.
+- Backup automatizado, restauração validada e implantação com HTTPS na VPS.
 
-Antes de depender da instalação no dia a dia: testar backup e restauração de
-banco/arquivos, configurar HTTPS e supervisão do processo, implementar recuperação
-de conta e definir a política de exclusão/auditoria. A versão atual é uma base
-local de validação, sem implantação em VPS nesta entrega.
+A aplicação continua atendendo uma conta de engenheiro e várias obras/clientes.
+Não há emissão fiscal, assinatura digital, aplicativo offline ou integração bancária.
