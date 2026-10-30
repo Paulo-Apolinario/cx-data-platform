@@ -159,3 +159,22 @@ Os antigos arquivos com credenciais foram retirados do código atual, mas perman
 no histórico Git. Substitua qualquer senha publicada que tenha sido utilizada.
 
 Veja [arquitetura, API, limites e próximos passos](docs/ARQUITETURA.md).
+
+### Perguntas do cliente e clareza dos materiais
+
+Na obra, a aba **Perguntas** permite ao cliente abrir um assunto e continuar a
+conversa com o engenheiro. Autor, data e mensagens permanecem no histórico. O
+indicador mostra quem deve responder. Atualize a obra para buscar novas mensagens;
+não há envio de e-mail, WhatsApp ou atualização em tempo real nesta versão.
+As conversas pertencem ao cliente que as iniciou: após trocar o titular, ficam
+somente para consulta do engenheiro e não são transferidas ao novo cliente.
+
+**Nova etapa** fica apenas no **Cronograma**. O quadro apresenta as mesmas etapas
+por situação e oferece um atalho para gerenciá-las no cronograma.
+
+Em Materiais, informe a medida no campo unidade (por exemplo, `saco`, `un`, `kg`,
+`m²`, `m³`) e a quantidade no saldo inicial. Unidades antigas numéricas aparecem
+como **Unidade a corrigir**. Use **Editar cadastro** para corrigir a medida; isso
+preserva as quantidades e o histórico, sem conversão ou suposição sobre os valores.
+Unidades válidas continuam protegidas contra troca para impedir conversões falsas.
+A migração 3 cria as tabelas de conversas automaticamente no próximo início.

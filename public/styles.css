@@ -1556,3 +1556,22 @@ progress { height: 5px; margin-bottom: 19px; }
 @media(max-width:760px) {
   .section-heading>.heading-actions { width: 100%; justify-content: flex-start; }
 }
+
+/* Clear stock quantities and persistent project conversations. */
+.stock-quantity { display:inline-flex; gap:.5rem; align-items:baseline; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.stock-quantity strong { font-size:1.08rem; }
+.stock-quantity > span { color:var(--muted,#64766f); font-size:.85rem; }
+.question-feed { display:grid; gap:1.25rem; }
+.question-card { padding:1.5rem; background:#fff; border:1px solid #d9e3de; border-radius:12px; min-width:0; }
+.question-card h3 { margin:0 0 .35rem; }
+.question-messages { list-style:none; padding:0; display:grid; gap:1rem; }
+.question-message { padding:1rem; background:#f3f6f4; border-radius:8px; border-left:3px solid #c4a16b; }
+.question-message.engineer { border-left-color:#214e43; }
+.question-message div { display:flex; gap:.5rem; flex-wrap:wrap; align-items:baseline; }
+.question-message small { color:#62766e; }
+.question-message p { white-space:pre-wrap; overflow-wrap:anywhere; margin:.6rem 0 0; }
+@media(max-width:600px) { .question-card {padding:1rem;} .question-card .section-heading {align-items:flex-start;flex-direction:column;} }
+
+.stock-table { min-width:680px; }
+.stock-table th:first-child,.stock-table td:first-child { min-width:160px; }
+.stock-table td:first-child { white-space:nowrap; }

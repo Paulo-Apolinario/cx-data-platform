@@ -58,6 +58,10 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
   }
   function details(projectId, user) {
     const result = {
+      questions:all(`SELECT q.*,u.name client_name FROM questions q JOIN users u ON u.id=q.client_id WHERE q.project_id=? ${user.role==='CLIENT'?'AND q.client_id=?':''} ORDER BY q.created_at DESC,q.rowid DESC`,...user.role==='CLIENT'?[projectId,user.id]:[projectId]).map(q=>{
+        const messages=all('SELECT m.id,m.message,m.created_at,u.name author_name,u.role author_role FROM question_messages m JOIN users u ON u.id=m.author_id WHERE m.question_id=? ORDER BY m.rowid',q.id);
+        return {...q,messages,awaiting:messages.at(-1)?.author_role==='CLIENT'?'ENGINEER':'CLIENT'};
+      }),
       stages:all('SELECT * FROM stages WHERE project_id=? ORDER BY COALESCE(start_date,\'9999\'),created_at,id',projectId).map(stageView),
       diary:all(`SELECT * FROM diary_entries WHERE project_id=? AND archived=0 ${user.role==='CLIENT'?'AND visible_to_client=1':''} ORDER BY work_date DESC,created_at DESC`,projectId).map(row=>diaryView(row,user)),
       approvals:all(`SELECT a.*, u.name decision_author FROM approvals a LEFT JOIN users u ON u.id=a.decided_by WHERE a.project_id=? ${user.role==='CLIENT'?"AND a.client_id=? AND a.status IN ('PENDING','APPROVED','REJECTED')":''} ORDER BY a.created_at DESC,a.id`,...user.role==='CLIENT'?[projectId,user.id]:[projectId])
@@ -78,7 +82,34 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
   function syncExpense(id) { const row=get('SELECT * FROM expenses WHERE id=?',id); run('UPDATE expenses SET status=? WHERE id=?',paid(id)===row.amount_cents?'PAID':'PENDING',id); }
   const finish = (send,status,data) => { send(status,data);return true; };
   async function handle({ path, req, user, body, send }) {
-    let m=path.match(/^\/api\/projects\/([^/]+)\/expenses\/([^/]+)\/payments\/([^/]+)\/void$/);
+    let m=path.match(/^\/api\/projects\/([^/]+)\/questions(?:\/([^/]+)\/messages)?$/);
+    if(m) {
+      const [,projectId,id]=m;
+      projectFor(user,projectId);
+      if(req.method==='GET'&&!id)return finish(send,200,details(projectId,user).questions);
+      if(req.method!=='POST')throw new v.HttpError(405,'Método não permitido.');
+      const input=await body(req),message=v.text(input.message,'Mensagem',5000),newId=requestId(input);
+      const title=id?null:v.text(input.title,'Assunto',200);
+      if(!id&&user.role!=='CLIENT')throw new v.HttpError(403,'Somente o cliente pode abrir uma pergunta.');
+      transaction(()=>{
+        const project=projectFor(user,projectId);
+        if(id){
+          const question=record('questions',projectId,id);
+          if(user.role==='CLIENT'&&question.client_id!==user.id)throw new v.HttpError(404,'Pergunta não encontrada.');
+          if(project.client_id!==question.client_id)error('O cliente desta conversa não está mais vinculado à obra.');
+        } else {
+          const previous=get('SELECT * FROM questions WHERE id=?',newId);
+          if(previous){if(previous.project_id!==projectId||previous.client_id!==user.id||previous.title!==title||get('SELECT message FROM question_messages WHERE question_id=? ORDER BY rowid LIMIT 1',newId)?.message!==message)error('Solicitação já utilizada.');return;}
+          run('INSERT INTO questions(id,project_id,client_id,title) VALUES(?,?,?,?)',newId,projectId,user.id,title);
+        }
+        const existing=get('SELECT * FROM question_messages WHERE id=?',newId);
+        if(existing){if(existing.question_id!==id||existing.author_id!==user.id||existing.message!==message)error('Solicitação já utilizada.');return;}
+        run('INSERT INTO question_messages(id,question_id,author_id,message) VALUES(?,?,?,?)',newId,id||newId,user.id,message);
+        audit(user,id?'question.replied':'question.created',id||newId);
+      });
+      return finish(send,201,{id:id||newId});
+    }
+    m=path.match(/^\/api\/projects\/([^/]+)\/expenses\/([^/]+)\/payments\/([^/]+)\/void$/);
     if(m && req.method==='POST') {
       engineer(user); projectFor(user,m[1]);const expense=record('expenses',m[1],m[2]);
       const payment=get('SELECT * FROM expense_payments WHERE id=? AND expense_id=?',m[3],expense.id);
@@ -151,9 +182,10 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
       if((method==='POST'&&!id)||(method==='PATCH'&&row)){
         const input=await body(req),name=v.text(input.name,'Material'),unit=v.text(input.unit,'Unidade',30),notes=v.text(input.notes,'Observações',2000,true),amount=v.number(input.quantity??row?.quantity??0,'Quantidade');
         if(amount&&quantity(amount)!==amount)throw new v.HttpError(400,'Quantidade inválida.');
-        if(row&&(amount!==balance(id)||unit!==row.unit))error('Saldo e unidade são preservados. Registre entradas, consumo, perdas ou transferência.');
+        if(!/\p{L}/u.test(unit))throw new v.HttpError(400,'Unidade: use um nome como un, saco, kg, m² ou m³. A quantidade fica no saldo inicial.');
+        if(row&&(amount!==balance(id)||(unit!==row.unit&&/\p{L}/u.test(row.unit))))error('Saldo e unidade são preservados. Registre entradas, consumo, perdas ou transferência.');
         const newId=id||randomUUID();
-        transaction(()=>{if(row)run('UPDATE materials SET name=?,notes=? WHERE id=?',name,notes,id);else{run('INSERT INTO materials(id,project_id,name,unit,quantity,notes) VALUES(?,?,?,?,?,?)',newId,projectId,name,unit,amount,notes);if(amount)run("INSERT INTO material_movements(id,material_id,type,quantity,delta,movement_date,notes,author_id) VALUES(?,?,'OPENING',?,?,?,?,?)",randomUUID(),newId,amount,amount,workToday(),'Saldo inicial',user.id);}audit(user,row?'materials.updated':'materials.created',newId);});
+        transaction(()=>{if(row){if(unit!==row.unit)audit(user,`material.unit.corrected:${row.unit}->${unit}`,id);run('UPDATE materials SET name=?,notes=?,unit=? WHERE id=?',name,notes,unit,id);}else{run('INSERT INTO materials(id,project_id,name,unit,quantity,notes) VALUES(?,?,?,?,?,?)',newId,projectId,name,unit,amount,notes);if(amount)run("INSERT INTO material_movements(id,material_id,type,quantity,delta,movement_date,notes,author_id) VALUES(?,?,'OPENING',?,?,?,?,?)",randomUUID(),newId,amount,amount,workToday(),'Saldo inicial',user.id);}audit(user,row?'materials.updated':'materials.created',newId);});
         return finish(send,row?200:201,{id:newId});
       }
     }

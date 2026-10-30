@@ -158,6 +158,48 @@ test('operações de obra: saldos, pagamentos, diário, medição e aceite',asyn
   } finally {await f.close();}
 });
 
+test('perguntas: histórico, isolamento, reenvio seguro e troca de titular',async()=>{
+  const f=await fixture(),{req,project:p,target:q,db}=f,base=`/projects/${p}/questions`;
+  try {
+    const input={title:'Prazo da fundação',message:'Quando começa?',request_id:randomUUID()};
+    assert.equal((await req(base,'POST',input)).status,403);
+    assert.equal((await req(base,'POST',input,'other')).status,404);
+    assert.equal((await req(base,'POST',{...input,message:'  '},'client')).status,400);
+    for(let i=0;i<2;i++)assert.equal((await req(base,'POST',input,'client')).status,201);
+    assert.equal((await req(base,'POST',{...input,message:'Mudou'},'client')).status,409);
+    let list=(await req(base)).data;assert.equal(list.length,1);assert.equal(list[0].messages.length,1);assert.equal(list[0].awaiting,'ENGINEER');
+    const id=list[0].id,reply={message:'Na próxima segunda-feira.',request_id:randomUUID()};
+    for(let i=0;i<2;i++)assert.equal((await req(`${base}/${id}/messages`,'POST',reply)).status,201);
+    list=(await req(base,'GET',undefined,'client')).data;assert.equal(list[0].awaiting,'CLIENT');assert.equal(list[0].messages.length,2);assert.equal(list[0].messages[1].author_role,'ENGINEER');
+    assert.equal((await req(`${base}/${id}/messages`,'POST',{message:'Outra dúvida'},'other')).status,404);
+    assert.equal((await req(`/projects/${q}/questions/${id}/messages`,'POST',{message:'Obra errada'})).status,404);
+    assert.equal((await req(`${base}/${id}/messages`,'POST',{message:'Qual horário?'},'client')).status,201);
+    assert.equal((await req(`/projects/${p}`)).data.questions[0].awaiting,'ENGINEER');
+    await req(`/projects/${p}/client`,'PATCH',{client_id:'other'});
+    assert.equal((await req(base,'GET',undefined,'client')).status,404);
+    assert.deepEqual((await req(base,'GET',undefined,'other')).data,[]);
+    assert.equal((await req(`${base}/${id}/messages`,'POST',{message:'Espiar'},'other')).status,404);
+    assert.equal((await req(`${base}/${id}/messages`,'POST',{message:'Resposta antiga'})).status,409);
+    assert.equal((await req(base)).data[0].messages.length,3);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM audit_log WHERE action LIKE 'question.%'").get().n,3);
+  } finally {await f.close();}
+});
+
+test('unidades numéricas são rejeitadas e legado pode ser corrigido sem mudar saldo',async()=>{
+  const f=await fixture(),{req,project:p,db}=f,base=`/projects/${p}/materials`;
+  try {
+    for(const unit of ['150','1000','1,5'])assert.equal((await req(base,'POST',{name:'Cimento',unit,quantity:3})).status,400);
+    const id=(await req(base,'POST',{name:'Cimento',unit:'saco',quantity:3})).data.id;
+    db.prepare('UPDATE materials SET unit=? WHERE id=?').run('150',id);
+    assert.equal((await req(`${base}/${id}`,'PATCH',{name:'Cimento',unit:'saco',quantity:150})).status,409);
+    assert.equal((await req(`${base}/${id}`,'PATCH',{name:'Cimento',unit:'saco',quantity:3})).status,200);
+    const detail=(await req(`/projects/${p}`)).data;
+    assert.equal(detail.materials[0].quantity,3);assert.equal(detail.movements[0].unit,'saco');assert.equal(detail.movements[0].delta,3);
+    assert.equal((await req(`${base}/${id}`,'PATCH',{name:'Cimento',unit:'kg',quantity:3})).status,409);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM audit_log WHERE action LIKE 'material.unit.corrected:%'").get().n,1);
+  } finally {await f.close();}
+});
+
 test('migração v1 preserva saldos, pagamentos e medições sem duplicar em reinício',()=>{
   const dir=mkdtempSync(join(tmpdir(),'migration-')),file=join(dir,'obras.sqlite');
   let db=new DatabaseSync(file);
@@ -174,6 +216,6 @@ test('migração v1 preserva saldos, pagamentos e medições sem duplicar em rei
     db.close();db=openDatabase(dir);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM material_movements').get().n,1);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM expense_payments').get().n,1);
-    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2]);
+    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3]);
   } finally {db.close();rmSync(dir,{recursive:true,force:true});}
 });

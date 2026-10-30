@@ -130,5 +130,22 @@ export function openDatabase(dataDir) {
       INSERT INTO migrations(version) VALUES(2);
     COMMIT;`);
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version = 3').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE questions (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+        client_id TEXT NOT NULL REFERENCES users(id), title TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE question_messages (
+        id TEXT PRIMARY KEY, question_id TEXT NOT NULL REFERENCES questions(id),
+        author_id TEXT NOT NULL REFERENCES users(id), message TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX questions_project ON questions(project_id,client_id);
+      CREATE INDEX messages_question ON question_messages(question_id);
+      INSERT INTO migrations(version) VALUES(3);
+    COMMIT;`);
+  }
   return db;
 }

@@ -161,7 +161,7 @@ test('fluxo de gestão de obras e autorização de ponta a ponta', async t => {
   } finally {
     server.close(); await once(server,'close'); db.close();
     const reopened=openDatabase(dir);
-    try { assert.equal(reopened.prepare('SELECT name FROM projects WHERE id=?').get(projectId).name,'Casa A atualizada');assert.equal(reopened.prepare('SELECT COUNT(*) n FROM migrations').get().n,2); }
+    try { assert.equal(reopened.prepare('SELECT name FROM projects WHERE id=?').get(projectId).name,'Casa A atualizada');assert.equal(reopened.prepare('SELECT COUNT(*) n FROM migrations').get().n,3); }
     finally { reopened.close();rmSync(dir,{recursive:true,force:true}); }
   }
 });

@@ -171,3 +171,22 @@ relatório de medição assinado ou emissão de documentos fiscais nesta entrega
 2. Categorias e revisões de documentos; dependências entre etapas e visualização Gantt.
 3. Convites, recuperação e desativação de contas, notificações e auditoria geral na interface.
 4. Plano de produção, backup automatizado e restauração testada; avaliar PostgreSQL.
+
+## Conversas por obra (migração 3)
+
+`questions` guarda assunto, obra e cliente original. `question_messages` mantém
+mensagens imutáveis, autor e timestamp. `GET /api/projects/:id/questions` lista
+conversas autorizadas; `POST` cria um assunto (cliente apenas), e
+`POST /api/projects/:id/questions/:question/messages` acrescenta uma resposta.
+O campo derivado `awaiting` indica o papel que deve responder. Identificadores
+`request_id` tornam reenvios idênticos seguros. Permissão e vínculo são checados
+novamente dentro da transação após a leitura do corpo da requisição.
+
+O engenheiro consulta todas as conversas da obra, enquanto o cliente só consulta
+as próprias e precisa continuar titular da obra. Após uma troca de titular,
+conversas anteriores não recebem respostas e não aparecem para o novo cliente.
+Não há exclusão/edição de mensagens, envio externo ou polling automático.
+
+Materiais com unidade numérica legada podem ter somente o rótulo corrigido,
+com auditoria específica, sem mudar saldo ou movimentos. A validação exige pelo
+menos uma letra; unidades válidas continuam imutáveis. Não há conversão automática.

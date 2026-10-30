@@ -8,6 +8,7 @@
 | Materiais | Saldos iniciais, entradas, consumo, perdas e transferência atômica entre obras, histórico e fornecedor. |
 | Financeiro | Fornecedor, vencimento, pagamento parcial, comprovante, estorno justificado, indicadores e orçamento versus realizado. |
 | Cronograma | Peso/medição por etapa, responsável, datas previstas/reais e alertas de prazo vencido. |
+| Perguntas | Conversas por obra, histórico de mensagens, autor/data, indicação de resposta e isolamento por cliente. |
 | Aprovações | Rascunho, envio ao portal, bloqueio do conteúdo enviado, aceite/recusa do cliente, autor/data e histórico preservado. |
 
 ## Evoluções ainda propostas
