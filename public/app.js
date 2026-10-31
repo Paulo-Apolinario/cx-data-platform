@@ -47,7 +47,8 @@ function render() {
     return;
   }
   const nav = [['overview','overview','Visão geral'],['projects','projects','Minhas obras'], ...(isEngineer() ? [['clients','users','Clientes']] : [])];
-  $('#app').innerHTML = `<div class="shell"><aside class="sidebar"><a class="brand" href="#"><span class="brand-icon">${icon('building')}</span><span>Gestão<br><b>de Obras</b></span></a><div class="workspace">${isEngineer() ? 'ESPAÇO DO ENGENHEIRO' : 'PORTAL DO CLIENTE'}</div><nav aria-label="Principal">${nav.map(([page,symbol,label]) => `<button data-action="navigate" data-page="${page}" class="nav-link ${state.page === page ? 'selected' : ''}">${icon(symbol)}${label}</button>`).join('')}</nav><div class="sidebar-note"><span class="eyebrow">CADA DETALHE CONTA</span><p>${isEngineer() ? 'Uma visão organizada para conduzir suas obras.' : 'Mais perto de cada etapa da sua obra.'}</p></div><div class="account"><span class="avatar">${esc(state.user.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${isEngineer() ? 'Engenheiro' : 'Cliente'}</small></div></div><div class="account-actions">${button('password','Trocar senha','','text-button')}${button('logout','Sair','','text-button')}</div></aside><main class="main"><header class="topbar"><span>Gestão de Obras <span class="muted">/ ${state.detail ? esc(state.detail.project.name) : state.page === 'clients' ? 'Clientes' : state.page === 'projects' ? 'Minhas obras' : 'Visão geral'}</span></span><span class="today">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span></header><div class="content">${state.detail ? projectDetail() : state.page === 'clients' ? clientsPage() : projectsPage()}</div><footer>Gestão de Obras <span>Planejamento, execução e transparência.</span></footer></main></div>`;
+  $('#app').innerHTML = `<div class="shell"><aside class="sidebar"><a class="brand" href="#"><span class="brand-icon">${icon('building')}</span><span>Gestão<br><b>de Obras</b></span></a><div class="workspace">${isEngineer() ? 'ESPAÇO DO ENGENHEIRO' : 'PORTAL DO CLIENTE'}</div><nav aria-label="Principal">${nav.map(([page,symbol,label]) => `<button data-action="navigate" data-page="${page}" class="nav-link ${state.page === page ? 'selected' : ''}">${icon(symbol)}${label}</button>`).join('')}</nav><div class="sidebar-note"><span class="eyebrow">CADA DETALHE CONTA</span><p>${isEngineer() ? 'Uma visão organizada para conduzir suas obras.' : 'Mais perto de cada etapa da sua obra.'}</p></div><div class="account"><span class="avatar">${esc(state.user.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${isEngineer() ? 'Engenheiro' : 'Cliente'}</small></div></div><div class="account-actions">${button('password','Trocar senha','','text-button')}${button('logout','Sair','','text-button')}</div></aside><nav class="mobile-bottom-nav" aria-label="Navegação no celular">${button('navigate',icon('overview')+'<span>Início</span>','data-page="overview"','mobile-nav-button')}${button('navigate',icon('projects')+'<span>Obras</span>','data-page="projects"','mobile-nav-button')}${isEngineer()?button('navigate',icon('users')+'<span>Clientes</span>','data-page="clients"','mobile-nav-button'):''}${button('mobile-account',icon('users')+'<span>Conta</span>','','mobile-nav-button')}</nav><main class="main"><header class="topbar"><span>Gestão de Obras <span class="muted">/ ${state.detail ? esc(state.detail.project.name) : state.page === 'clients' ? 'Clientes' : state.page === 'projects' ? 'Minhas obras' : 'Visão geral'}</span></span><span class="today">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span></header><div class="content">${state.detail ? projectDetail() : state.page === 'clients' ? clientsPage() : projectsPage()}</div><footer>Gestão de Obras <span>Planejamento, execução e transparência.</span></footer></main></div>`;
+  document.querySelectorAll('.mobile-bottom-nav [data-page]').forEach(item=>item.setAttribute('aria-current',item.dataset.page===state.page?'page':'false'));
   const tabs=$('.tabs'),active=tabs?.querySelector('[aria-selected=true]');
   if(active)tabs.scrollLeft=Math.max(0,active.offsetLeft-tabs.clientWidth/2+active.offsetWidth/2);
 }
@@ -87,6 +88,7 @@ function attentionPanel(){
   for(const p of state.projects){
     const add=(count,label,tab)=>{if(count)items.push({id:p.id,name:p.name,label,tab});};
     if(isEngineer()){
+      add(!p.progress_configured,'Definir serviços contratados','services');
       add(p.overdue_stages,`${p.overdue_stages} etapa(s) com prazo vencido`,'schedule');
       add(p.overdue_cents,`${money(p.overdue_cents)} em contas vencidas`,'expenses');
       add(p.low_stock_count,`${p.low_stock_count} material(is) com estoque baixo`,'materials');
@@ -107,7 +109,7 @@ function projectCards() {
     <article class="project-card">
       <div class="project-cover">${buildingScene({ compact: true })}<div class="cover-status">${badge(p.status)}</div><span class="cover-caption">VOLUME ILUSTRATIVO</span></div>
       <div class="project-card-body"><h3>${esc(p.name)}</h3><p class="address">${icon('pin')}${esc(p.address || 'Endereço ainda não informado')}</p>
-        <div class="progress-caption"><span>Avanço da obra</span><strong>${p.progress}%</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
+        <div class="progress-caption"><span>Avanço da obra</span><strong>${p.progress_configured?p.progress+'%':'A definir'}</strong></div><progress value="${p.progress}" max="100">${p.progress}%</progress>
         ${isEngineer() ? `<div class="card-client ${p.client_id ? '' : 'unassigned'}"><span class="client-avatar">${icon('users')}</span><div><small>CLIENTE DA OBRA</small><strong>${esc(p.client_name || 'Vincule o cliente desta obra')}</strong></div><button class="icon-button" data-action="assign-client" data-id="${p.id}" aria-label="${esc(p.client_id ? `Alterar cliente de ${p.name}` : `Vincular cliente a ${p.name}`)}">${icon(p.client_id ? 'link' : 'plus')}</button></div>` : ''}
         <div class="card-facts"><div><small>PREVISÃO DE ENTREGA</small><span>${day(p.end_date)}</span></div><div><small>ETAPAS</small><span>${p.completed_stages} de ${p.stage_count}</span></div></div>
         <a class="card-open" href="#obra=${p.id}" data-action="open-project" data-id="${p.id}" aria-label="Acompanhar obra: ${esc(p.name)}">Acompanhar obra ${icon('arrow')}</a>
@@ -120,14 +122,14 @@ function clientsPage() {
 }
 function projectDetail() {
   const { project: p } = state.detail;
-  const tabs = [['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['purchases','Compras'],['expenses','Despesas'],['workers','Equipe']] : []),['questions','Perguntas'],['selections','Acabamentos'],['inspections','Vistoria e pós-obra']];
+  const tabs = [['services','Serviços contratados'],['stages','Quadro de obra'],['diary','Diário de obra'],['schedule','Cronograma'],['approvals','Aprovações'],['photos','Mapa fotográfico'],['documents','Documentos'], ...(isEngineer() ? [['materials','Materiais'],['purchases','Compras'],['expenses','Despesas'],['workers','Equipe']] : []),['questions','Perguntas'],['selections','Acabamentos'],['inspections','Vistoria e pós-obra']];
   return `
     <button class="back text-button" data-action="back">← Todas as obras</button>
     <section class="project-heading-panel"><div class="project-heading-copy"><span class="eyebrow">ACOMPANHAMENTO DA OBRA</span><h1 data-project-heading tabindex="-1">${esc(p.name)}</h1><p class="detail-address">${icon('pin')}${esc(p.address || 'Endereço não informado')}</p><div class="heading-actions">${badge(p.status)}${isEngineer() ? button('edit-project','Editar obra','','secondary') : ''}</div>${p.description ? `<p class="project-description">${esc(p.description)}</p>` : ''}</div>${buildingScene({ controls: true })}</section>
     ${isEngineer() ? `<section class="client-association ${p.client_id ? '' : 'unassigned'}" aria-labelledby="client-association-title"><span class="client-avatar">${icon('users')}</span><div class="client-association-copy"><span class="eyebrow" id="client-association-title">CLIENTE DA OBRA</span><h2>${esc(p.client_name || 'Esta obra ainda não tem cliente vinculado')}</h2><p>${p.client_id ? esc(p.client_email) : 'Vincule um cadastro existente ou crie o cliente aqui mesmo.'}</p><small>${p.client_id ? 'Acesso às etapas e aos arquivos publicados desta obra.' : 'O vínculo libera o acompanhamento no portal do cliente.'}</small></div>${button('assign-client', `${icon('link')} ${p.client_id ? 'Alterar cliente' : 'Vincular cliente'}`, `data-id="${p.id}"`, p.client_id ? 'secondary' : 'primary')}</section>` : ''}
-    <div class="project-summary"><div><small>INÍCIO</small><strong>${day(p.start_date)}</strong></div><div><small>PREVISÃO DE ENTREGA</small><strong>${day(p.end_date)}</strong></div><div><small>ETAPAS CONCLUÍDAS</small><strong>${p.completed_stages} de ${p.stage_count}</strong><small>AVANÇO DA OBRA · ${p.progress}%</small></div>${isEngineer() ? `<div><small>ORÇAMENTO PREVISTO</small><strong>${money(p.budget_cents)}</strong></div>` : ''}</div>
-    <p class="progress-note">O avanço mostra quanto da obra foi executado. As etapas têm a mesma participação, salvo ajuste do engenheiro.</p>
-    <div class="tabs" role="tablist" aria-label="Informações da obra">${tabs.map(([tab,label]) => `<button id="tab-${tab}" role="tab" aria-selected="${state.tab === tab}" aria-controls="detail-panel" tabindex="${state.tab === tab ? 0 : -1}" class="${state.tab === tab ? 'active' : ''}" data-action="tab" data-tab="${tab}">${label}</button>`).join('')}</div>
+    <div class="project-summary"><div><small>INÍCIO</small><strong>${day(p.start_date)}</strong></div><div><small>PREVISÃO DE ENTREGA</small><strong>${day(p.end_date)}</strong></div><div><small>AVANÇO FÍSICO</small><strong>${p.progress_configured?p.progress+'%':'A definir'}</strong><small>Execução dos serviços contratados</small></div><div><small>TAREFAS DO QUADRO</small><strong>${p.completed_stages} de ${p.stage_count}</strong><small>Concluídas no planejamento</small></div>${isEngineer() ? `<div><small>ORÇAMENTO PREVISTO</small><strong>${money(p.budget_cents)}</strong></div>` : ''}</div>
+    <p class="progress-note">O avanço físico considera os serviços contratados e a execução registrada. As tarefas do quadro organizam o trabalho.</p>
+    <label class="mobile-section">Área da obra<select id="mobile-section-picker" aria-label="Área da obra">${tabs.map(([tab,label])=>`<option value="${tab}" ${state.tab===tab?'selected':''}>${label}</option>`).join('')}</select></label><div class="tabs" role="tablist" aria-label="Informações da obra">${tabs.map(([tab,label]) => `<button id="tab-${tab}" role="tab" aria-selected="${state.tab === tab}" aria-controls="detail-panel" tabindex="${state.tab === tab ? 0 : -1}" class="${state.tab === tab ? 'active' : ''}" data-action="tab" data-tab="${tab}">${label}</button>`).join('')}</div>
     <section id="detail-panel" class="tab-content" role="tabpanel" aria-labelledby="tab-${state.tab}">${tabContent()}</section>`;
 }
 
@@ -198,7 +200,7 @@ async function openProject(id, changeHistory = true) {
   const request = ++projectRequest;
   const detail = await api(`/projects/${id}`);
   if (request !== projectRequest) return;
-  Object.assign(state,{projectId:id,detail,page:'projects',tab:'stages',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all',diaryFrom:'',diaryTo:'',materialSearch:'',materialFilter:'all',materialHistoryId:''});
+  Object.assign(state,{projectId:id,detail,page:'projects',tab:'services',attachmentSearch:'',attachmentStage:'',attachmentVisibility:'all',diaryFrom:'',diaryTo:'',materialSearch:'',materialFilter:'all',materialHistoryId:''});
   if (changeHistory) history.pushState(null,'',`#obra=${id}`);
   render(); window.scrollTo(0,0); $('[data-project-heading]').focus({preventScroll:true});
 }
@@ -294,12 +296,12 @@ function projectForm(edit = false) {
 function stageForm(id) {
   const s = state.detail.stages.find(s=>s.id===id) || {};
   const fields = field('title','Nome da etapa',s.title) + selectStatus(s.status || 'PLANNED',['PLANNED','IN_PROGRESS','COMPLETED'])
-    + field('progress_percent','Etapa concluída (%)',s.progress_percent ?? 0,'number',{max:100}) + `<details class="full advanced-settings"><summary>Avançado: participação no avanço total</summary><p>Por padrão, todas as etapas contam igualmente (valor 1). Valor 2 faz esta etapa contar o dobro de uma etapa com valor 1. Isso não representa quantidade de material nem valor financeiro.</p>${field('weight','Participação relativa',s.weight ?? 1,'number',{min:.001,max:1000,step:.001})}</details>`
+    + field('progress_percent','Tarefa concluída (%)',s.progress_percent ?? 0,'number',{max:100}) + field('service_id','Serviço contratado vinculado',s.service_id||'','select',{choices:[['','Tarefa geral de planejamento'],...state.detail.services.map(service=>[service.id,service.title])]})
     + field('responsible','Responsável',s.responsible,'text',{optional:true})
     + field('start_date','Início previsto',s.start_date,'date',{optional:true}) + field('end_date','Conclusão prevista',s.end_date,'date',{optional:true})
     + field('actual_start','Início real',s.actual_start,'date',{optional:true}) + field('actual_end','Conclusão real',s.actual_end,'date',{optional:true});
-  modal(id ? 'Editar etapa' : 'Nova etapa', fields, 'Salvar etapa', 'Informe quanto desta etapa já foi executado: 0% = não iniciada; 50% = metade pronta; 100% = concluída. A situação acompanha o percentual.', async data => {
-    const input=Object.fromEntries(data); input.weight=Number(input.weight);input.progress_percent=Number(input.progress_percent);
+  modal(id ? 'Editar etapa' : 'Nova etapa', fields, 'Salvar etapa', 'Organize a tarefa e vincule ao serviço correspondente. A situação desta tarefa não altera o avanço físico da obra.', async data => {
+    const input=Object.fromEntries(data); input.progress_percent=Number(input.progress_percent);
     await api(`/projects/${state.projectId}/stages${id?`/${id}`:''}`,{method:id?'PATCH':'POST',body:input}); await refresh();
   });
   $('#modal-form [name=progress_percent]').addEventListener('input',event=>{const n=Number(event.target.value);$('#modal-form [name=status]').value=n===100?'COMPLETED':n>0?'IN_PROGRESS':'PLANNED';});
@@ -344,6 +346,7 @@ document.addEventListener('click', async event => {
     if (operationsUI.handles(action)) { event.preventDefault(); await operationsUI.action(action,target); return; }
     if(action==='refresh-dashboard')return refresh();
     if(action==='attention-open'){await openProject(id);if(state.projectId!==id)return;state.tab=target.dataset.tab;render();return;}
+    if(action==='mobile-account'){const dialog=$('#modal');dialog.innerHTML=`<div class="modal-heading"><h2 id="dialog-title">Minha conta</h2>${button('close-modal','Fechar','','secondary')}</div><p>${esc(state.user.name)}</p><div class="account-sheet">${button('password','Trocar senha','','secondary')}${button('logout','Sair','','secondary')}</div>`;dialog.showModal();return;}
     if (action==='close-modal') return $('#modal').close();
     if (action==='navigate' || action==='back') { projectRequest++; state.page=target.dataset.page || 'projects'; state.projectId=null; state.detail=null; history.pushState(null,'',`#${state.page}`); render(); window.scrollTo(0,0); return; }
     if (action==='logout') { projectRequest++;await api('/auth/logout',{method:'POST',body:{}});state.clients=[];$('#modal').close();$('#modal').replaceChildren();$('#print-report')?.remove(); state.user=null; state.projects=[]; state.detail=null; state.projectId=null; history.replaceState(null,'','#overview'); render(); return; }
@@ -367,7 +370,7 @@ document.addEventListener('click', async event => {
     if (action==='delete-attachment') return confirmDelete(`/attachments/${id}`,'Excluir este anexo e seu arquivo?');
     if (action==='visibility') { target.disabled=true; await api(`/attachments/${id}`,{method:'PATCH',body:{visible_to_client:target.dataset.visible==='true'}}); await refresh(); notice('Visibilidade atualizada.'); return; }
     if (action==='new-client') return modal('Novo cliente', field('name','Nome') + field('email','E-mail','','email',{max:254}) + field('password','Senha inicial (mínimo 12 caracteres)','','password'), 'Cadastrar cliente', 'Entregue a senha por um canal privado. O cliente poderá alterá-la após entrar. Depois, vincule-o à obra.', async data=>{await api('/clients',{method:'POST',body:Object.fromEntries(data)});await refresh();});
-    if (action==='password') return modal('Trocar senha', '<label>Senha atual<input name="current_password" type="password" autocomplete="current-password" required maxlength="128"></label>' + field('password','Nova senha','','password') + field('confirmation','Repita a nova senha','','password'), 'Alterar senha', 'Você precisará entrar novamente após a alteração.', async data=>{if(data.get('password')!==data.get('confirmation'))throw new Error('As senhas não coincidem.');await api('/auth/password',{method:'POST',body:Object.fromEntries(data)});state.user=null;state.detail=null;state.projectId=null;render();});
+    if (action==='password') {$('#modal').close();return modal('Trocar senha', '<label>Senha atual<input name="current_password" type="password" autocomplete="current-password" required maxlength="128"></label>' + field('password','Nova senha','','password') + field('confirmation','Repita a nova senha','','password'), 'Alterar senha', 'Você precisará entrar novamente após a alteração.', async data=>{if(data.get('password')!==data.get('confirmation'))throw new Error('As senhas não coincidem.');await api('/auth/password',{method:'POST',body:Object.fromEntries(data)});state.user=null;state.detail=null;state.projectId=null;render();});}
   } catch(error) { handleError(error); }
   finally { target.disabled=false; }
 });
@@ -408,3 +411,5 @@ document.addEventListener('keydown', event => {
   event.preventDefault(); state.tab = tabs[next].dataset.tab; render();
   document.querySelector(`[data-tab="${state.tab}"]`).focus();
 });
+
+document.addEventListener('change',event=>{if(event.target.id==='mobile-section-picker'){state.tab=event.target.value;render();}});

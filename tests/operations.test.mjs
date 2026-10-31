@@ -35,11 +35,11 @@ test('operações de obra: saldos, pagamentos, diário, medição e aceite',asyn
   let source,destination,expense,receipt,diary,photoPublic,photoPrivate,worker,approval;
   const date=workToday();
   try {
-    await t.test('medição ponderada e alertas sem alterar contagem de etapas',async()=>{
+    await t.test('tarefas antigas e alertas não definem avanço físico sem contratação',async()=>{
       assert.equal((await req(base+'/stages','POST',{title:'Fundação',status:'COMPLETED',weight:1})).status,201);
       assert.equal((await req(base+'/stages','POST',{title:'Estrutura',status:'IN_PROGRESS',progress_percent:50,weight:3,end_date:'2000-01-01',responsible:'Engenheiro'})).status,201);
       const detail=(await req(base)).data;
-      assert.equal(detail.project.progress,63);assert.equal(detail.project.completed_stages,1);assert.equal(detail.project.overdue_stages,1);
+      assert.equal(detail.project.progress,0);assert.equal(detail.project.progress_configured,false);assert.equal(detail.project.completed_stages,1);assert.equal(detail.project.overdue_stages,1);
       assert.equal(detail.stages.find(s=>s.title==='Estrutura').overdue,true);
       for(const data of [{title:'Inválida',status:'PLANNED',progress_percent:10},{title:'Inválida',weight:0},{title:'Inválida',status:'COMPLETED',progress_percent:90},{title:'Inválida',status:'IN_PROGRESS',actual_end:date},{title:'Não iniciada com data real',status:'PLANNED',actual_start:date}])assert.equal((await req(base+'/stages','POST',data)).status,400);
       assert.equal((await req(base+'/stages','POST',{title:'Proibida'},'client')).status,403);
@@ -216,6 +216,6 @@ test('migração v1 preserva saldos, pagamentos e medições sem duplicar em rei
     db.close();db=openDatabase(dir);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM material_movements').get().n,1);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM expense_payments').get().n,1);
-    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3,4,5,6]);
+    assert.deepEqual(db.prepare('SELECT version FROM migrations ORDER BY version').all().map(r=>r.version),[1,2,3,4,5,6,7]);
   } finally {db.close();rmSync(dir,{recursive:true,force:true});}
 });

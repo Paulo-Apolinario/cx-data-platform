@@ -31,10 +31,11 @@ implementada: será necessária se houver expansão de usuários/instâncias.
 - `audit_log`: autor, ação, identificador e data das alterações.
 - `migrations`: versão do schema aplicado automaticamente na inicialização.
 
-O progresso é a média ponderada das medições por etapa, sem vínculo automático
-com os volumes 3D ilustrativos. Em uma etapa de peso 1 com 100% e outra de peso 3
-com 50%, o avanço exibido é 63% (62,5% arredondado). A contagem de etapas concluídas
-continua disponível em separado.
+O avanço físico usa os serviços contratados: soma(participação × execução/meta).
+Participações somam 100%; percentuais de tarefas e situação do quadro não entram
+nesse cálculo. O volume 3D permanece ilustrativo. Sem escopo confirmado, a API
+retorna progress=0 e progress_configured=false; a interface mostra A definir.
+A contagem de tarefas concluídas permanece separada.
 
 Materiais usam soma dos deltas arredondada a três casas; a coluna `quantity` é
 atualizada como cache. Transferências debitam e creditam em uma transação, com
@@ -282,3 +283,32 @@ Indicadores de atenção são derivados dos registros existentes e incluídos na
 projeção da obra. Cliente recebe somente decisões pendentes destinadas à sua
 conta; estoque, contas e perguntas sem resposta do engenheiro são indicadores
 internos. Regras e casos reproduzíveis constam em REVISAO_CASOS_DE_USO.md.
+
+## Serviços contratados (migração 7)
+
+`contracted_services` guarda título, QUANTITY/PERCENT, unidade, meta e participação.
+`service_execution` guarda incrementos de execução com data, nota compartilhada,
+fotos e correção justificada (voided_at); os originais ficam preservados.
+`scope_revisions` guarda cada versão confirmada, motivo, snapshot e avanço antes/
+depois. `projects.scope_version=0` identifica escopo ainda em preparação.
+`stages.service_id` vincula tarefas a um serviço da mesma obra.
+
+POST/PATCH/DELETE `/api/projects/:project/services[/:service]` edita somente o
+rascunho. POST `/scope` confirma versão inicial, exigindo soma 100%; POST
+`/scope/revise` recebe versão atual, motivo e lista final dos serviços. Revisões
+não removem serviço já executado ou com tarefas; preservam unidade/modo de serviços
+com histórico e metas nunca ficam abaixo da execução acumulada. A revisão não
+altera orçamento nem confirma aprovação do cliente automaticamente.
+
+POST `/services/:id/records` acrescenta execução; POST `/execution/:id/void`
+corrige registro com motivo. Tudo é transacional e idempotente com request_id.
+O saldo contratado é checado no momento da gravação. GET nas coleções é limitado
+à própria obra; cliente não vê rascunhos ou fotos internas. Fotos referenciadas
+na execução são protegidas contra exclusão. Nenhuma execução dá baixa automática
+em materiais ou cria despesas: consumo e custo possuem seus próprios registros.
+
+A API mantém os percentuais/participações antigos de stages por compatibilidade
+histórica; não entram mais na projeção da obra. Nenhuma migração infere serviços
+contratados a partir de antigas tarefas. Manifesto e SVG são estáticos, sem service
+worker ou cache de respostas privadas. Navegação inferior e seletor de área usam
+as mesmas permissões e API do desktop.

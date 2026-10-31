@@ -269,7 +269,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
           }
           if (!match[2] && req.method === 'DELETE') {
             engineer(user);
-            if (get('SELECT id FROM selection_options WHERE image_id=?',attachment.id) || get('SELECT i.id FROM inspections i,json_each(i.attachment_ids_json) j WHERE j.value=?',attachment.id) || get('SELECT id FROM expense_payments WHERE receipt_id=?', attachment.id) || get('SELECT d.id FROM diary_entries d, json_each(d.attachment_ids_json) j WHERE j.value=?', attachment.id) || get("SELECT r.id FROM diary_revisions r, json_each(json_extract(r.snapshot_json,'$.attachment_ids_json')) j WHERE j.value=?", attachment.id)) throw new v.HttpError(409, 'Arquivo vinculado a diário ou pagamento. Preserve o histórico.');
+            if (get('SELECT e.id FROM service_execution e,json_each(e.attachment_ids_json) j WHERE j.value=?',attachment.id) || get('SELECT id FROM selection_options WHERE image_id=?',attachment.id) || get('SELECT i.id FROM inspections i,json_each(i.attachment_ids_json) j WHERE j.value=?',attachment.id) || get('SELECT id FROM expense_payments WHERE receipt_id=?', attachment.id) || get('SELECT d.id FROM diary_entries d, json_each(d.attachment_ids_json) j WHERE j.value=?', attachment.id) || get("SELECT r.id FROM diary_revisions r, json_each(json_extract(r.snapshot_json,'$.attachment_ids_json')) j WHERE j.value=?", attachment.id)) throw new v.HttpError(409, 'Arquivo vinculado a diário ou pagamento. Preserve o histórico.');
             transaction(() => { run('DELETE FROM attachments WHERE id=?', attachment.id); audit(user, 'attachment.deleted', attachment.id); });
             try { unlinkSync(resolve(uploads, attachment.id)); } catch (error) { console.error('Limpeza de arquivo:', error.code); }
             return send(200, { ok: true });
@@ -277,7 +277,7 @@ export function createApp({ dataDir = resolve('data'), origin = 'http://localhos
         }
         throw new v.HttpError(404, 'Recurso não encontrado.');
       }
-      const staticFiles = { '/units.js':['units.js','text/javascript'], '/workflows-ui.js':['workflows-ui.js','text/javascript'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/operations-ui.js': ['operations-ui.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
+      const staticFiles = { '/scope-ui.js':['scope-ui.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/app-icon.svg':['app-icon.svg','image/svg+xml'], '/units.js':['units.js','text/javascript'], '/workflows-ui.js':['workflows-ui.js','text/javascript'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/visuals.js': ['visuals.js', 'text/javascript'], '/operations-ui.js': ['operations-ui.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
       if (req.method !== 'GET' || !staticFiles[path]) throw new v.HttpError(404, 'Página não encontrada.');
       const [file, type] = staticFiles[path];
       res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` }); res.end(readFileSync(resolve(PUBLIC, file)));

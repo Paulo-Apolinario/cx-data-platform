@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as v from './validation.mjs';
 import { isUnit } from '../public/units.js';
+import { createScope } from './scope.mjs';
 import { createWorkflows } from './workflows.mjs';
 
 export const workToday = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -25,6 +26,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
   const reserved = id => get("SELECT ROUND(COALESCE(SUM(quantity),0),3) total FROM stock_reservations WHERE material_id=? AND status='ACTIVE'",id).total;
   const free = id => Math.round((balance(id)-reserved(id))*1000)/1000;
   const workflows=createWorkflows({get,all,run,audit,transaction,engineer,projectFor,balance,reserved,free,quantity,workToday});
+  const scope=createScope({get,all,run,transaction,audit,engineer,projectFor});
   function record(table, projectId, id) {
     const row = get(`SELECT * FROM ${table} WHERE id=? AND project_id=?`, id, projectId);
     if (!row) throw new v.HttpError(404, 'Registro não encontrado nesta obra.');
@@ -42,9 +44,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
   }
   function summary(projectId) {
     const stages = all('SELECT * FROM stages WHERE project_id=?', projectId);
-    const weight = stages.reduce((sum,s) => sum + s.weight,0);
-    const raw=weight?stages.reduce((sum,s)=>sum+s.weight*s.progress_percent,0)/weight:0;
-    return { progress: stages.length&&stages.every(s=>s.status==='COMPLETED')?100:Math.min(99,Math.round(raw)),
+    return { ...scope.summary(projectId),
       overdue_stages: stages.filter(s => stageView(s).overdue).length };
   }
   function finance(projectId) {
@@ -68,7 +68,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
         const messages=all('SELECT m.id,m.message,m.created_at,u.name author_name,u.role author_role FROM question_messages m JOIN users u ON u.id=m.author_id WHERE m.question_id=? ORDER BY m.rowid',q.id);
         return {...q,messages,awaiting:messages.at(-1)?.author_role==='CLIENT'?'ENGINEER':'CLIENT'};
       }),
-      stages:all('SELECT * FROM stages WHERE project_id=? ORDER BY COALESCE(start_date,\'9999\'),created_at,id',projectId).map(stageView),
+      stages:all('SELECT * FROM stages WHERE project_id=? ORDER BY COALESCE(start_date,\'9999\'),created_at,id',projectId).map(row=>({...stageView(row),service_title:row.service_id?get('SELECT title FROM contracted_services WHERE id=?',row.service_id)?.title:null})),
       diary:all(`SELECT * FROM diary_entries WHERE project_id=? AND archived=0 ${user.role==='CLIENT'?'AND visible_to_client=1':''} ORDER BY work_date DESC,created_at DESC`,projectId).map(row=>diaryView(row,user)),
       approvals:all(`SELECT a.*, u.name decision_author FROM approvals a LEFT JOIN users u ON u.id=a.decided_by WHERE a.project_id=? ${user.role==='CLIENT'?"AND a.client_id=? AND a.status IN ('PENDING','APPROVED','REJECTED')":''} ORDER BY a.created_at DESC,a.id`,...user.role==='CLIENT'?[projectId,user.id]:[projectId])
     };
@@ -78,7 +78,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
       expenses:all('SELECT * FROM expenses WHERE project_id=? ORDER BY COALESCE(due_date,expense_date),created_at',projectId).map(expenseView),
       payments:all('SELECT p.*,e.description expense_description FROM expense_payments p JOIN expenses e ON e.id=p.expense_id WHERE e.project_id=? ORDER BY p.created_at DESC,p.id',projectId)
     });
-    Object.assign(result,workflows.details(projectId,user));
+    Object.assign(result,workflows.details(projectId,user),scope.details(projectId,user));
     return result;
   }
   function receiptFor(id, projectId) {
@@ -89,6 +89,7 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
   function syncExpense(id) { const row=get('SELECT * FROM expenses WHERE id=?',id); run('UPDATE expenses SET status=? WHERE id=?',paid(id)===row.amount_cents?'PAID':'PENDING',id); }
   const finish = (send,status,data) => { send(status,data);return true; };
   async function handle({ path, req, user, body, send }) {
+    if(await scope.handle({path,req,user,body,send}))return true;
     if(await workflows.handle({path,req,user,body,send}))return true;
     let m=path.match(/^\/api\/projects\/([^/]+)\/questions(?:\/([^/]+)\/messages)?$/);
     if(m) {
@@ -167,8 +168,10 @@ export function createOperations({ db, get, all, run, audit, transaction, engine
         if(status==='COMPLETED'&&progress!==100||status==='PLANNED'&&progress!==0||status==='IN_PROGRESS'&&progress===100)throw new v.HttpError(400,'Situação e medição devem ser compatíveis (planejada 0%, concluída 100%).');
         if(status==='PLANNED'&&(actualStart||actualEnd))throw new v.HttpError(400,'Uma etapa não iniciada não pode ter datas reais.');
         if(actualEnd&&(!actualStart||status!=='COMPLETED'))throw new v.HttpError(400,'Informe o início real e conclua a etapa antes de registrar o fim real.');
-        const values=[v.text(input.title,'Etapa'),start,end,status,v.number(input.weight??1,'Peso',.001,1000),progress,v.text(input.responsible,'Responsável',200,true),actualStart,actualEnd],newId=id||randomUUID();
-        transaction(()=>{if(row)run('UPDATE stages SET title=?,start_date=?,end_date=?,status=?,weight=?,progress_percent=?,responsible=?,actual_start=?,actual_end=? WHERE id=?',...values,id);else run('INSERT INTO stages(id,project_id,title,start_date,end_date,status,weight,progress_percent,responsible,actual_start,actual_end) VALUES(?,?,?,?,?,?,?,?,?,?,?)',newId,projectId,...values);audit(user,row?'stages.updated':'stages.created',newId);});
+        const service=input.service_id||null;
+        if(service&&!get('SELECT id FROM contracted_services WHERE id=? AND project_id=? AND archived=0',service,projectId))throw new v.HttpError(400,'Selecione um serviço desta obra.');
+        const values=[v.text(input.title,'Etapa'),start,end,status,v.number(input.weight??row?.weight??1,'Peso',.001,1000),progress,v.text(input.responsible,'Responsável',200,true),actualStart,actualEnd],newId=id||randomUUID();
+        transaction(()=>{if(row)run('UPDATE stages SET title=?,start_date=?,end_date=?,status=?,weight=?,progress_percent=?,responsible=?,actual_start=?,actual_end=?,service_id=? WHERE id=?',...values,service,id);else run('INSERT INTO stages(id,project_id,title,start_date,end_date,status,weight,progress_percent,responsible,actual_start,actual_end,service_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',newId,projectId,...values,service);audit(user,row?'stages.updated':'stages.created',newId);});
         return finish(send,row?200:201,{id:newId});
       }
     }

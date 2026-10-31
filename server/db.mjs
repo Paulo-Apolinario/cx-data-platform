@@ -227,5 +227,32 @@ export function openDatabase(dataDir) {
       INSERT INTO migrations(version) VALUES(6);
     COMMIT;`);
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version=7').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      ALTER TABLE projects ADD COLUMN scope_version INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE contracted_services (
+        id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),title TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK(mode IN ('QUANTITY','PERCENT')),unit TEXT NOT NULL,
+        quantity REAL NOT NULL CHECK(quantity>0),share REAL NOT NULL CHECK(share>0 AND share<=100),
+        archived INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE service_execution (
+        id TEXT PRIMARY KEY,service_id TEXT NOT NULL REFERENCES contracted_services(id),
+        quantity REAL NOT NULL CHECK(quantity>0),work_date TEXT NOT NULL,note TEXT NOT NULL,
+        attachment_ids_json TEXT NOT NULL DEFAULT '[]',author_id TEXT NOT NULL REFERENCES users(id),
+        voided_at TEXT,void_reason TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE scope_revisions (
+        project_id TEXT NOT NULL REFERENCES projects(id),version INTEGER NOT NULL,reason TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,progress_before REAL,progress_after REAL,
+        author_id TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(project_id,version)
+      );
+      ALTER TABLE stages ADD COLUMN service_id TEXT REFERENCES contracted_services(id);
+      CREATE INDEX services_project ON contracted_services(project_id,archived);
+      CREATE INDEX execution_service ON service_execution(service_id);
+      INSERT INTO migrations(version) VALUES(7);
+    COMMIT;`);
+  }
   return db;
 }

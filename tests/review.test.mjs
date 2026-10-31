@@ -74,10 +74,10 @@ test('revisão: compra incorreta, estoque, pagamentos e saldo permanecem coerent
 test('revisão: avanço, cadastro duplicado, equipe histórica e rotas',async t=>{
  const f=await fixture(),{req,project:p,db}=f,base=`/projects/${p}`,date=workToday();
  try{
-  await t.test('etapa em 99,9% não faz a obra aparecer concluída',async()=>{
+  await t.test('tarefas concluídas não substituem a contratação e execução dos serviços',async()=>{
    const id=(await req(base+'/stages','POST',{title:'Fundação',status:'IN_PROGRESS',progress_percent:99.9})).data.id;
-   assert.equal((await req(base)).data.project.progress,99);
-   await req(`${base}/stages/${id}`,'PATCH',{title:'Fundação',status:'COMPLETED',progress_percent:100});assert.equal((await req(base)).data.project.progress,100);
+   assert.equal((await req(base)).data.project.progress,0);
+   await req(`${base}/stages/${id}`,'PATCH',{title:'Fundação',status:'COMPLETED',progress_percent:100});assert.equal((await req(base)).data.project.progress,0);
    assert.equal((await req(`${base}/stages/${id}/payments`,'DELETE')).status,404);assert.equal(db.prepare('SELECT COUNT(*) n FROM stages').get().n,1);
   });
   await t.test('cadastro inicial repetido e renomear para outro material são bloqueados',async()=>{

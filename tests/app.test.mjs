@@ -83,7 +83,7 @@ test('fluxo de gestão de obras e autorização de ponta a ponta', async t => {
       const created=await request(`/projects/${projectId}/stages`,{method:'POST',cookie:engineer,data:{title:'Fundação'}});
       assert.equal(created.status,201);stageId=created.data.id;
       assert.equal((await request(`/projects/${projectId}/stages/${stageId}`,{method:'PATCH',cookie:engineer,data:{title:'Fundação',status:'COMPLETED'}})).status,200);
-      assert.equal((await request(`/projects/${projectId}`,{cookie:client})).data.project.progress,100);
+      assert.equal((await request(`/projects/${projectId}`,{cookie:client})).data.project.progress,0);
       assert.equal((await request(`/projects/${otherProjectId}/stages/${stageId}`,{method:'DELETE',cookie:engineer})).status,404);
     });
     await t.test('materiais, despesas e equipe persistidos e editáveis', async () => {
@@ -161,7 +161,7 @@ test('fluxo de gestão de obras e autorização de ponta a ponta', async t => {
   } finally {
     server.close(); await once(server,'close'); db.close();
     const reopened=openDatabase(dir);
-    try { assert.equal(reopened.prepare('SELECT name FROM projects WHERE id=?').get(projectId).name,'Casa A atualizada');assert.equal(reopened.prepare('SELECT COUNT(*) n FROM migrations').get().n,6); }
+    try { assert.equal(reopened.prepare('SELECT name FROM projects WHERE id=?').get(projectId).name,'Casa A atualizada');assert.equal(reopened.prepare('SELECT COUNT(*) n FROM migrations').get().n,7); }
     finally { reopened.close();rmSync(dir,{recursive:true,force:true}); }
   }
 });

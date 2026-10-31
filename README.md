@@ -22,7 +22,8 @@ de CX está arquivada em `legacy/cx-events/` e não faz parte do sistema atual.
 - Relatório do diário por período, pronto para imprimir ou salvar em PDF pelo navegador.
 - Materiais com saldo inicial, entradas, consumo, perdas e transferência entre obras.
 - Financeiro com fornecedor, vencimento, pagamentos parciais, comprovantes e estornos.
-- Cronograma com percentual concluído, responsáveis, datas previstas/reais e participação avançada opcional.
+- Serviços contratados com quantidades, participações, execução real e revisões de escopo.
+- Quadro e cronograma de tarefas vinculadas aos serviços, sem alterar o avanço físico.
 - Unidades de material por lista, prévia de saldo, estorno de movimentos, mínimo e reservas.
 - Compras efetuadas com cadastro de material na própria compra, entrada automática, despesa/pagamento e saldo do orçamento atualizados juntos.
 - Acabamentos com opções, fotos, adicionais e decisão do cliente.
@@ -105,9 +106,8 @@ engenheiro. A aplicação web se adapta ao celular; não há aplicativo nativo/o
   com histórico de pagamentos não podem ser excluídos. O realizado soma despesas
   registradas; o pago soma pagamentos não estornados, sem duplicar os valores.
 - **Cronograma:** informe o percentual concluído (0 a 100%), responsável e datas da
-  etapa. Todas contam igualmente por padrão; a participação relativa está em
-  **Avançado**. O avanço é `soma(participação × percentual) / soma(participações)`,
-  arredondado ao inteiro.
+  tarefa e vincule-a ao serviço contratado. O avanço físico considera a execução
+  dos serviços em Serviços contratados. Concluir tarefas não altera o avanço da obra.
   Planejada exige 0%; concluída exige 100%. Datas reais são opcionais; a conclusão
   real exige início real e situação concluída. Prazos vencidos são destacados.
 - **Aprovações:** crie e revise o rascunho, depois envie ao portal do cliente
@@ -238,7 +238,7 @@ ou movimentos. Nenhum registro antigo pendente vira compra automaticamente.
 A Visão geral reúne pendências existentes por obra e dá acesso direto à tela de
 resolução. Engenheiro e cliente têm indicadores diferentes, preservando dados
 internos. Filtros de materiais reiniciam ao abrir outra obra; cadastros repetidos
-na mesma unidade são bloqueados; 100% de avanço exige todas as etapas concluídas.
+na mesma unidade são bloqueados; 100% de avanço físico exige execução completa dos serviços contratados.
 Profissionais citados no histórico do diário devem ser inativados em vez de excluídos.
 
 Em Compras, **Corrigir compra** abre um estorno integral justificado. Exige saldo
@@ -248,3 +248,50 @@ a compra correta. Não movimenta dinheiro no banco nem substitui devolução fí
 parcial ao fornecedor. Despesas canceladas não aceitam novos pagamentos/edições.
 
 Veja [casos de uso, ajustes verificados e próximas funções propostas](docs/REVISAO_CASOS_DE_USO.md).
+
+### Serviços contratados e celular (migração 7)
+
+1. Abra a obra em **Serviços contratados**. Cadastre o que foi contratado, a
+   quantidade/unidade ou acompanhamento por percentual e a participação no total.
+   Exemplo: fundação 30%, alvenaria 40% e pintura 30%.
+2. Confira se as participações somam 100% e use **Confirmar contratação**.
+3. Use **Registrar execução** para informar o realizado em cada ocasião. Se foram
+   feitos 20 m² hoje, registre 20, mesmo que já houvesse execução anterior. Em modo
+   percentual, informe o avanço adicional daquele registro. Fotos são opcionais;
+   apenas fotos publicadas aparecem para o cliente.
+4. Organize tarefas no Quadro/Cronograma e vincule-as aos serviços. Essas tarefas
+   não compõem o percentual físico. Compras/pagamentos também não o alteram.
+5. Quantidade errada pode ser corrigida com justificativa no histórico de execução.
+   **Revisar escopo** altera o contratado, incluindo novos serviços e participações,
+   e registra motivo, versões e impacto no avanço. Não altera o orçamento nem
+   equivale a aceite ou assinatura digital do cliente.
+
+Cálculo: soma da participação de cada serviço × fração executada. Fundação completa
+com participação 30%, metade da alvenaria com 40% e pintura não iniciada com 30%
+resultam em 50% de avanço. Não se somam quantidades de unidades distintas. O sistema
+bloqueia execução acima do contratado, redução de contrato abaixo do já executado
+ou troca da unidade/modo de serviço com histórico.
+
+Obras existentes mantêm seus dados e tarefas. O avanço físico aparece como
+**A definir** até a contratação ser configurada. Percentuais antigos de tarefas
+não são convertidos automaticamente em serviços ou em execução física.
+
+Em celulares, a interface possui navegação inferior Início/Obras/Clientes/Conta,
+seletor de área da obra, botões de toque, formulários em painel inferior, campos
+legíveis e espaços para as áreas seguras da tela. O cliente não vê Clientes ou
+áreas internas de gestão. Desktop mantém navegação lateral e abas. Manifesto e
+ícone permitem apresentação independente em navegadores compatíveis; não há
+aplicativo nativo ou funcionamento offline. Não se armazenam dados privados em
+cache offline.
+
+Para testar no celular na mesma rede Wi-Fi do computador:
+
+1. No PowerShell, execute `ipconfig` e localize o IPv4 da conexão ativa.
+2. No `.env`, use `HOST=0.0.0.0` e ajuste `APP_ORIGIN` para esse endereço, por
+   exemplo `APP_ORIGIN=http://192.168.1.10:3000` (substitua pelo IPv4 real).
+3. Reinicie com `npm start` e abra esse mesmo endereço no computador e celular.
+   `localhost` no celular aponta para o próprio celular. Se o Windows pedir
+   autorização de rede para o Node, libere a rede privada usada no teste.
+
+Esse é um teste na rede local. Para acesso externo, a aplicação precisa estar
+hospedada com endereço próprio e HTTPS. O servidor continua disponível no desktop.

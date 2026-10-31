@@ -10,7 +10,8 @@
 | Acabamentos | Opções com fotos e adicionais por ambiente, envio ao cliente e decisão imutável. |
 | Vistoria e pós-obra | Pendências, fotos enviadas pelo cliente, atendimento, responsável/prazo, conferência, reabertura e histórico. |
 | Financeiro | Fornecedor, vencimento, pagamento parcial, comprovante, estorno justificado, indicadores e orçamento versus realizado. |
-| Cronograma | Percentual concluído por etapa e participação relativa opcional, responsável, datas previstas/reais e alertas de prazo vencido. |
+| Serviços contratados | Meta por quantidade/percentual, participação no total, confirmação, execução real e revisão versionada do escopo. |
+| Cronograma | Tarefas vinculadas aos serviços, responsável, datas previstas/reais e alertas; sem efeito no avanço físico. |
 | Perguntas | Conversas por obra, histórico de mensagens, autor/data, indicação de resposta e isolamento por cliente. |
 | Aprovações | Rascunho, envio ao portal, bloqueio do conteúdo enviado, aceite/recusa do cliente, autor/data e histórico preservado. |
 
@@ -31,3 +32,5 @@ de equipe histórica e validação de ações da API. Casos detalhados em
 
 A aplicação continua atendendo uma conta de engenheiro e várias obras/clientes.
 Não há emissão fiscal, assinatura digital, aplicativo offline ou integração bancária.
+
+Interface móvel: navegação inferior, seletor de áreas, formulários em painel inferior, ícone/manifesto e respeito às áreas seguras da tela; desktop preservado.

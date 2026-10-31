@@ -19,7 +19,7 @@ foram acessados ou modificados durante a validação.
 | UC08 — Compra parcialmente usada | Tentar estornar compra já consumida/reservada | Bloqueio com explicação. Corrija a retirada ou libere a reserva e recomponha o saldo antes de estornar a compra integral. Não cria estoque negativo. |
 | UC09 — Duas ações simultâneas | Pagar uma despesa enquanto a compra é estornada | Verificação dentro da transação; despesa cancelada não termina com pagamento ativo. |
 | UC10 — Cadastro repetido | Criar novamente material de mesmo nome/unidade ou renomear outro para esse cadastro | Bloqueio no estoque inicial/edição; compras reutilizam o cadastro existente. Unidade legada ambígua exige correção explícita. |
-| UC11 — Cronograma | Informar 99,9% em etapa ainda em execução | Obra mostra no máximo 99%; 100% somente quando todas as etapas estiverem concluídas. Participações diferentes continuam preservadas. |
+| UC11 — Cronograma | Informar 99,9% em etapa ainda em execução | Tarefa não altera avanço físico. Serviços contratados e registros de execução definem o progresso; a contratação precisa estar confirmada. |
 | UC12 — Diário e equipe | Inativar ou tentar excluir profissional que apareceu no diário | Inativação permitida, exclusão bloqueada se houver registro atual ou revisão. Equipe e notas internas não são expostas ao cliente. |
 | UC13 — Fotos e documentos | Publicar, tornar interno, baixar ou excluir arquivo referenciado | Autorização em cada acesso; cliente só vê publicação. Arquivos usados em pagamentos, diário/revisões, acabamentos e vistorias têm exclusão protegida. |
 | UC14 — Perguntas e decisões | Cliente pergunta, recebe resposta, aprova adicional ou escolhe acabamento | Conta/data e histórico preservados; apenas destinatário titular decide; decisão não altera orçamento nem gera cobrança automaticamente. |
@@ -49,7 +49,7 @@ foram acessados ou modificados durante a validação.
 
 ## Validação e limites
 
-`npm test`: 63 testes aprovados, incluindo os novos cenários em
+`npm test`: 70 testes aprovados, incluindo os novos cenários em
 `tests/review.test.mjs` e as regressões de autenticação, estoque, compras, financeiro,
 portal, diário, aprovações, acabamentos e pós-obra. Verificação de sintaxe e
 `git diff --check` aprovadas.
@@ -81,3 +81,20 @@ externas continuam como trabalhos separados.
 
 As propostas aproveitam os dados já existentes e evitam novas telas com informações
 repetidas. A ordem pode ser ajustada conforme a rotina do engenheiro.
+
+## Casos adicionais — serviços e uso no celular
+
+- UC21: confirmar fundação (30%), alvenaria (40%) e pintura (30%); fundação em 100%
+  e alvenaria em 100/200 m² resultam em 50%, independentemente de tarefas concluídas.
+- UC22: acrescentar mais 100 m² contratados de alvenaria por revisão; avanço muda
+  de 50% para 43%, com motivo e snapshots preservados e sem efeito financeiro.
+- UC23: impedir execução excedente, alterações por cliente, fotografias de outra
+  obra e alterações de unidade com histórico; correção de execução preserva original.
+- UC24: executar duas medições concorrentes respeitando saldo contratado; repetição
+  do mesmo request_id não duplica execução ou revisão.
+- UC25: usar celular para contratação/revisão, trocar áreas, registrar compra e
+  entrar/sair pela navegação inferior; cliente só consulta seus serviços publicados.
+
+Validação adicional em tests/scope.test.mjs e Chromium em desktop e celular. As
+obras anteriores continuam sem contratação inferida automaticamente. A configuração
+do escopo deve ser realizada pelo engenheiro para exibir avanço físico.
