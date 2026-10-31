@@ -1,0 +1,2 @@
+export const units = [['un','Unidade (un)'],['saco','Saco'],['kg','Quilograma (kg)'],['g','Grama (g)'],['t','Tonelada (t)'],['m','Metro (m)'],['m²','Metro quadrado (m²)'],['m³','Metro cúbico (m³)'],['L','Litro (L)'],['mL','Mililitro (mL)'],['caixa','Caixa'],['pacote','Pacote'],['rolo','Rolo'],['barra','Barra'],['peça','Peça'],['par','Par'],['lata','Lata'],['galão','Galão'],['balde','Balde'],['palete','Palete']];
+export const isUnit = value => units.some(([id])=>id===value);

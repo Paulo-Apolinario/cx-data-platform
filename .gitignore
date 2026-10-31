@@ -8,9 +8,12 @@ __pycache__/
 .venv/
 
 # Env (NÃO subir)
-#.env
-#.env.local
-#.env.docker
+.env
+.env.*
+!.env.example
+data/
+*.sqlite*
+coverage/
 
 # Docker
 *.log
